@@ -274,20 +274,21 @@ After installing the host systemd services, validate the delivered `css` driver
 with the scenario stack:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --current-node
+sudo sh scripts/css-scenario-test-deploy.sh --clean --profile smoke --current-node
 ```
 
 After installing client services on every target Swarm node:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes
+sudo sh scripts/css-scenario-test-deploy.sh --clean --profile full --all-ready-nodes
 ```
 
 The stack only schedules on nodes labelled `css.test.enabled=true`. The deploy
-script applies that label to selected nodes, runs private/plain,
-private/encrypted, shared-single/plain, and shared-single/encrypted workloads,
-then writes `reports/css-scenario-<run-id>/results.tsv` and `report.md`. See
-`docs/scenario-test-guide.md` for optional backup and shared-multi SQLite probes.
+script applies that label to selected nodes, renders the requested scenario
+matrix, then writes `results.tsv`, `controls.tsv`, `report.md`, service logs,
+and the rendered Stack under `reports/css-scenario-<run-id>/`. `full` covers all
+36 valid option combinations plus negative/control checks; `smoke` is only a
+fast local subset. See `docs/scenario-test-guide.md` for the profile details.
 Use `--clear-labels` if you want the script to remove its temporary
 `css.test.*` node labels after reporting.
 

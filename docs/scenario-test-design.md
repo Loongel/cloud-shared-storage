@@ -113,7 +113,7 @@ secret.
 Common per-scenario layout inside the mounted volume:
 
 ```text
-/.css-test/<run_id>/<scenario_id>/
+/css-scenario-test/<run_id>/<scenario_id>/
   manifest.json
   writers/<node>.json
   checksums/<node>.sha256

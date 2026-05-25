@@ -141,16 +141,17 @@ The `cs.*` option names are unchanged.
 Run the formal Stack workload test after installation:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --current-node
+sudo sh scripts/css-scenario-test-deploy.sh --clean --profile smoke --current-node
 ```
 
 For multi-node validation after every client node is installed:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes
+sudo sh scripts/css-scenario-test-deploy.sh --clean --profile full --all-ready-nodes
 ```
 
 Reports are written to `reports/css-scenario-<run-id>/`. The stack schedules
-only on nodes labelled by the deploy script and uses the host `css` driver. This
-test stack is kept in the repository as an acceptance tool; it is not installed
-into the production `.deb`.
+only on nodes labelled by the deploy script and uses the host `css` driver.
+`full` renders all 36 valid option combinations; missing prerequisites are
+reported as `BLOCKED`, not hidden. This test stack is kept in the repository as
+an acceptance tool; it is not installed into the production `.deb`.

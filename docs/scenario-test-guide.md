@@ -1,83 +1,83 @@
 # CSS Scenario Stack Test Guide
 
 This test suite validates the formal host systemd deployment through Docker
-Swarm Stack workloads. It is an acceptance tool kept in the repository, not a
-production `.deb` runtime payload. It does not run CS-Storage server, daemon, or
-plugin as containers. Each workload mounts a real Docker volume with driver
-`css`, writes test data, reads it back, and prints a machine-readable result.
-The host report script also checks the WebDAV backend directly when it can read
-the server env.
+Swarm Stack workloads. It is a repository acceptance tool, not a production
+`.deb` runtime payload, and it does not run CS-Storage server, daemon, or plugin
+as containers.
+
+The harness renders a Stack from `deploy/scenario-test/scenarios.tsv`. The
+committed `deploy/stack/css-scenario-test.yml` is the full rendered matrix.
+
+## Profiles
+
+- `full`: all 36 valid combinations of mode/write/engine/crypt/backup, plus
+  host-side negative and control tests.
+- `core`: all 18 non-backup combinations, plus negative and control tests.
+- `smoke`: four fast realtime scenarios: private/shared-single x plaintext/encrypted.
+- `backup-only`: all `cs.backup=auto` scenarios.
+- `shared-multi-only`: all `shared + multi` engine scenarios.
+
+Requested scenarios with missing prerequisites are reported as `BLOCKED`. A
+formal run is successful only when there are no `FAIL` or `BLOCKED` rows.
 
 ## Quick Local Test
 
-Run this on a Swarm manager after installing `cs-storage-server.service`,
-`cs-storage-daemon.service`, and `cs-storage-plugin.service` on the local node:
-
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --current-node
+sudo sh scripts/css-scenario-test-deploy.sh \
+  --clean \
+  --profile smoke \
+  --current-node \
+  --clear-labels
 ```
 
-The default stack labels only the current node with
-`node.labels.css.test.enabled=true`, then deploys:
-
-- `private_plain`: `cs.mode=private`, `cs.write=single`, `cs.crypt=false`.
-- `private_encrypted`: `cs.mode=private`, `cs.write=single`, `cs.crypt=true`.
-- `shared_single_plain`: `cs.mode=shared`, `cs.write=single`, `cs.crypt=false`.
-- `shared_single_encrypted`: `cs.mode=shared`, `cs.write=single`, `cs.crypt=true`.
-
-Reports are written under `reports/css-scenario-<run-id>/`.
-
-Add `--clear-labels` when you want the deploy script to remove the temporary
-`css.test.*` node labels after the report is generated.
-
-## Multi-Node Test
+## Multi-Node Formal Test
 
 After every target node has the host client services installed and the Docker
-driver socket exists at `/run/docker/plugins/css.sock`, run:
+driver socket exists at `/run/docker/plugins/css.sock`:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes
+sudo sh scripts/css-scenario-test-deploy.sh \
+  --clean \
+  --profile full \
+  --all-ready-nodes \
+  --clear-labels
 ```
 
-The workload containers run globally on nodes labelled
-`css.test.enabled=true`. They write one marker per node and then list visible
-markers. Shared scenarios expect the number of visible writers to match the
-selected node count.
-
-## Optional Scenarios
-
-Backup and shared-multi SQLite probes are intentionally disabled by default
-because they require extra daemon-side configuration.
+For SQLite workloads, use a workload image that contains `sqlite3`, for example:
 
 ```sh
-sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes --enable-backup
-sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes --enable-sqlite
+CSS_TEST_SQLITE_IMAGE=<image-with-sqlite3> \
+sudo sh scripts/css-scenario-test-deploy.sh --clean --profile full --all-ready-nodes
 ```
 
-`--enable-backup` labels selected nodes with `css.test.backup=true` so the
-`cs.backup=auto` service can schedule. It requires a working Kopia repository
-config in the daemon environment.
+## Report Files
 
-`--enable-sqlite` labels selected nodes with `css.test.sqlite=true` so the
-`cs.mode=shared`, `cs.write=multi`, `cs.engine=sqlite` probe can schedule. It
-requires the LiteFS/Consul settings needed by this deployment mode.
+Reports are written under `reports/css-scenario-<run-id>/`:
 
-## Report Columns
+- `results.tsv`: one row per scenario/node result, including requested options,
+  expected/actual visible marker sets, SQLite checks, WebDAV check, backup check,
+  status, and notes.
+- `controls.tsv`: negative and control tests for invalid combinations, bad enum
+  values, and destructive `flush` label rejection.
+- `report.md`: human-readable summary.
+- `service-logs.txt`: raw workload logs.
+- `stack.rendered.yml`: exact Stack file used for the run.
 
-`results.tsv` contains:
+## What Is Verified
 
-- `scenario`: test scenario name.
-- `node`: Swarm node hostname reported to the container.
-- `service`: Swarm service name.
-- `volume`: logical stack volume name.
-- `driver_opts`: CSS driver options under test.
-- `operations`: operations performed inside the mounted volume.
-- `expected`: expected writer count or behavior.
-- `actual_volume_state`: writer files seen from the mounted volume.
-- `actual_backend_state`: direct WebDAV check result when available.
-- `status`: `PASS` or `FAIL`.
-- `notes`: short failure reason or `ok`.
+- Private single-write volumes: each node writes and reads only its own marker;
+  other nodes' markers must not be visible.
+- Shared single-write volumes: one deterministic writer writes, all selected
+  nodes must read that writer's marker.
+- Shared multi static volumes: every node writes a marker and every node must
+  see all markers.
+- Shared multi SQLite volumes: every node inserts a deterministic SQLite row;
+  every node must report `PRAGMA integrity_check=ok` and the expected row count.
+- Shared multi auto volumes: normal marker files plus SQLite checks.
+- Plaintext WebDAV: direct backend GET must match the expected marker checksum.
+- Encrypted WebDAV: plaintext marker paths must be absent and encrypted cipher
+  state must exist.
+- Backup auto: Kopia prerequisites and snapshots are checked; missing config is
+  `BLOCKED`.
 
-For encrypted scenarios, the direct backend check expects the plaintext marker
-path to be absent and `cipher/gocryptfs.conf` to exist under the node sandbox.
-Secret values are never printed.
+See `docs/scenario-test-design.md` for the complete matrix and pass/fail rules.
