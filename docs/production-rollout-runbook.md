@@ -55,15 +55,47 @@ The live hd01 production blockers are closed for the requested delivery scope. D
 
 ## Production Install Entrypoint
 
-The formal production install path is host systemd, not CS-Storage runtime containers. Build and publish the `.deb`, then run `scripts/cs-storage-systemd-node-install.sh` on each node. The package supplies binaries and unit files; the installer supplies node-specific configuration and secrets.
+The formal production install path is host systemd, not CS-Storage runtime containers. Use the role-specific wrappers for normal installs; they download the release `.deb`, write only the needed config, and refuse accidental secret replacement.
+
+Server only:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh -o /tmp/css-install-server.sh
+sh /tmp/css-install-server.sh \
+  --backend-url <webdav-or-s3-http-url> \
+  --backend-user-file /etc/cs-storage/secrets/backend_user \
+  --backend-password-file /etc/cs-storage/secrets/backend_password
+```
+
+Client only:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh -o /tmp/css-install-client.sh
+sh /tmp/css-install-client.sh \
+  --server-url http://<server-host>:18080 \
+  --node-secret-file /etc/cs-storage/secrets/node_secret
+```
+
+Server plus client on the same node:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh -o /tmp/css-install-all.sh
+sh /tmp/css-install-all.sh \
+  --backend-url <webdav-or-s3-http-url> \
+  --backend-user-file /etc/cs-storage/secrets/backend_user \
+  --backend-password-file /etc/cs-storage/secrets/backend_password
+```
+
+The package also includes the lower-level `cs-storage-systemd-node-install` for advanced automation. It is more explicit and expects file-backed secrets:
 
 ```sh
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.0/cs-storage_0.1.0_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.1/cs-storage_0.1.1_amd64.deb \
   --role all \
-  --server-url http://127.0.0.1:8080 \
+  --driver-name css \
+  --server-url http://127.0.0.1:18080 \
   --backend-url <webdav-or-s3-http-url> \
   --node-secret-file /etc/cs-storage/secrets/node_secret \
   --backend-user-file /etc/cs-storage/secrets/backend_user \
@@ -75,6 +107,13 @@ sh /tmp/cs-storage-install.sh \
 ```
 
 Use `--role server` or `--role client` for split server/client deployments. Set `--backend-auth-header-file` instead of the backend user/password pair when that is the backend auth model. The historical `scripts/hd01-production-install.sh` and Swarm launcher smokes remain as validation and migration aids, but they are not the formal production runtime.
+
+Secret rules:
+
+- `node_secret` must be identical on server and clients. Server/all generates it only on first install if absent; client-only requires it.
+- `gocryptfs_password` is generated only on first client/all install if absent. Back it up before using encrypted volumes.
+- Repeat installs reuse existing secret files. Different replacement values are refused unless `--force-secret-update` is passed, and the old file is backed up first.
+- Installer output shows file paths and SHA256 fingerprints only; it never prints secret values.
 
 
 ## Non-Destructive Validation Order

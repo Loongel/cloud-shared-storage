@@ -10,7 +10,7 @@ import (
 
 func main() {
 	cfg := gateway.Config{
-		Addr:              config.String("CS_SERVER_ADDR", ":8080"),
+		Addr:              config.String("CS_SERVER_ADDR", ":18080"),
 		Secret:            config.String("CS_NODE_SECRET_KEY", ""),
 		BackendURL:        config.String("CS_BACKEND_URL", ""),
 		BackendAuthHeader: config.String("CS_BACKEND_AUTH_HEADER", ""),

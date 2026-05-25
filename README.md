@@ -19,7 +19,7 @@ Required environment:
 
 Optional environment:
 
-- `CS_SERVER_ADDR`: listen address, default `:8080`.
+- `CS_SERVER_ADDR`: listen address, default `:18080`.
 - `CS_BACKEND_AUTH_HEADER`: backend `Authorization` header injected after stripping the node JWT.
 - `CS_BACKEND_USER` / `CS_BACKEND_PASSWORD`: optional WebDAV Basic Auth source when `CS_BACKEND_AUTH_HEADER` is not set.
 - `CS_TOKEN_TTL`: token lifetime, default `12h`.
@@ -184,33 +184,64 @@ This repository now includes production-oriented deployment scaffolding:
 
 Formal production deployment uses host systemd services, not long-running CS-Storage runtime containers:
 
-- `cs-storage-server.service` listens on `:8080`.
+- `cs-storage-server.service` listens on an automatically chosen high port, default search range `18080-18100`.
 - `cs-storage-daemon.service` owns `/run/cs-storage.sock` and host mounts under `/mnt/cs_storage/vols`.
 - `cs-storage-plugin.service` owns `/run/docker/plugins/css.sock` for the Docker `css` VolumeDriver.
 
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.0
+./scripts/cs-storage-build-deb.sh --version 0.1.1
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.0
-git push origin main v0.1.0
+git tag v0.1.1
+git push origin main v0.1.1
 ```
 
-On each node, run the installer with the release asset URL:
+For normal installs, use the role-specific one-command wrappers.
+
+Server only, for a dedicated gateway node. Required: backend URL and backend auth only. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret`; copy that same file securely to client nodes.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh -o /tmp/css-install-server.sh
+sh /tmp/css-install-server.sh \
+  --backend-url https://rausu.infini-cloud.net/dav/ \
+  --backend-user-file /etc/cs-storage/secrets/backend_user \
+  --backend-password-file /etc/cs-storage/secrets/backend_password
+```
+
+Client only, for an application node. Required: server URL and the server's same `node_secret`.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh -o /tmp/css-install-client.sh
+sh /tmp/css-install-client.sh \
+  --server-url http://<server-host>:18080 \
+  --node-secret-file /etc/cs-storage/secrets/node_secret
+```
+
+Server plus client on the same node. Required: backend URL and backend auth only. The local client uses the local server URL automatically.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh -o /tmp/css-install-all.sh
+sh /tmp/css-install-all.sh \
+  --backend-url https://rausu.infini-cloud.net/dav/ \
+  --backend-user-file /etc/cs-storage/secrets/backend_user \
+  --backend-password-file /etc/cs-storage/secrets/backend_password
+```
+
+The lower-level installer remains available for advanced automation:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.0/cs-storage_0.1.0_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.1/cs-storage_0.1.1_amd64.deb \
   --role all \
   --driver-name css \
-  --server-url http://127.0.0.1:8080 \
+  --server-url http://127.0.0.1:18080 \
   --backend-url <webdav-or-s3-http-url> \
   --node-secret-file /etc/cs-storage/secrets/node_secret \
   --backend-user-file /etc/cs-storage/secrets/backend_user \
@@ -222,6 +253,19 @@ sh /tmp/cs-storage-install.sh \
 ```
 
 Use `--role server` on a gateway-only node and `--role client` on client-only nodes. Use `--backend-auth-header-file` instead of user/password files when the backend requires a prebuilt authorization header. The installer writes `/etc/cs-storage/*.env`, stores secret copies under `/etc/cs-storage/secrets`, reloads systemd, and starts the selected services without printing secret values.
+
+### Secret Safety
+
+The one-command wrappers intentionally avoid surprising secret changes:
+
+- `node_secret` authenticates clients to the server. It is generated only during first server/all install if absent. Client-only installs never generate it; they require the exact same file/value from the server.
+- `gocryptfs_password` protects encrypted volume contents. It is generated only during first client/all install if absent. Changing it after encrypted data exists makes that old encrypted data unreadable.
+- Existing secret files are reused on repeat installs.
+- Passing a different secret value/file for an existing secret is refused by default. To rotate intentionally, pass `--force-secret-update`; the old file is backed up as `*.BAK.<timestamp>` first.
+- Install output prints secret file paths and SHA256 fingerprints, not secret values. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
+
+See `docs/install-guide.md` for scenario commands, parameter details, repeat
+install behavior, and common failure handling.
 
 ## Build on hd01
 

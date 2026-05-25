@@ -19,8 +19,9 @@ ENABLE_NOW=${ENABLE_NOW:-1}
 RESTART_SERVICES=${RESTART_SERVICES:-1}
 SERVICE_USER=${SERVICE_USER:-cs-storage}
 SERVICE_GROUP=${SERVICE_GROUP:-$SERVICE_USER}
+CSS_ALLOW_SECRET_REPLACE=${CSS_ALLOW_SECRET_REPLACE:-no}
 
-CS_SERVER_ADDR=${CS_SERVER_ADDR:-:8080}
+CS_SERVER_ADDR=${CS_SERVER_ADDR:-:18080}
 CS_SERVER_URL=${CS_SERVER_URL:-}
 CS_PUBLIC_URL=${CS_PUBLIC_URL:-}
 CS_BACKEND_URL=${CS_BACKEND_URL:-}
@@ -45,7 +46,7 @@ Options:
   --deb-url URL                  Download and install CS-Storage package from URL first.
   --bin-dir DIR                  Directory containing cs-storage-* binaries.
   --image IMAGE                  Docker image to extract binaries from when --bin-dir is absent.
-  --server-addr ADDR             S-side listen address, default :8080.
+  --server-addr ADDR             S-side listen address, default :18080.
   --server-url URL               URL C-side daemon uses for S-side /auth.
   --public-url URL               Optional public URL returned from /auth.
   --backend-url URL              WebDAV/S3 HTTP backend URL for S-side gateway.
@@ -203,7 +204,7 @@ install_deb_package() {
   fi
   test -s "$DEB" || { echo "missing deb package: $DEB" >&2; exit 1; }
   if command -v apt-get >/dev/null 2>&1; then
-    apt-get install -y "$DEB"
+    apt-get install -y --reinstall "$DEB"
   else
     need_cmd dpkg
     dpkg -i "$DEB"
@@ -290,6 +291,13 @@ copy_secret() {
     src_real=$(readlink -f "$src")
     dst_real=$(readlink -m "$dst")
     if test "$src_real" != "$dst_real"; then
+      if test -s "$dst" && ! cmp -s "$src" "$dst"; then
+        test "$CSS_ALLOW_SECRET_REPLACE" = yes || {
+          echo "refusing to replace existing secret: $dst" >&2
+          echo "set CSS_ALLOW_SECRET_REPLACE=yes only for an intentional credential rotation" >&2
+          exit 1
+        }
+      fi
       install -m 0640 -o root -g "$SERVICE_GROUP" "$src" "$dst"
     else
       chown root:"$SERVICE_GROUP" "$dst"

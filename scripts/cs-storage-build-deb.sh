@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.1.1}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -16,7 +16,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.0.
+  --version VERSION       Package version, default 0.1.1.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
@@ -30,6 +30,7 @@ The package installs:
   /usr/local/bin/cs-storage-*
   /lib/systemd/system/cs-storage-*.service
   /usr/local/sbin/cs-storage-systemd-node-install
+  /usr/local/sbin/css-install-{server,client,all}
   /usr/share/cs-storage/env/*.example
 EOF
 }
@@ -130,6 +131,10 @@ for bin in litefs kopia; do
 done
 
 install -m 0755 scripts/cs-storage-systemd-node-install.sh "$pkg_root/usr/local/sbin/cs-storage-systemd-node-install"
+install -m 0755 scripts/css-install-common.sh "$pkg_root/usr/local/sbin/css-install-common"
+install -m 0755 scripts/css-install-server.sh "$pkg_root/usr/local/sbin/css-install-server"
+install -m 0755 scripts/css-install-client.sh "$pkg_root/usr/local/sbin/css-install-client"
+install -m 0755 scripts/css-install-all.sh "$pkg_root/usr/local/sbin/css-install-all"
 for unit in cs-storage-server.service cs-storage-daemon.service cs-storage-plugin.service; do
   install -m 0644 "deploy/systemd/$unit" "$pkg_root/lib/systemd/system/$unit"
 done
