@@ -1,0 +1,261 @@
+version: "3.8"
+
+services:
+  private_plain:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "private_plain"
+      CSS_TEST_VOLUME: "css_private_plain"
+      CSS_TEST_MODE: "private"
+      CSS_TEST_WRITE: "single"
+      CSS_TEST_ENGINE: "auto"
+      CSS_TEST_CRYPT: "false"
+      CSS_TEST_BACKUP: "none"
+      CSS_TEST_EXPECT_SHARED: "false"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_private_plain:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+      restart_policy:
+        condition: none
+
+  private_encrypted:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "private_encrypted"
+      CSS_TEST_VOLUME: "css_private_encrypted"
+      CSS_TEST_MODE: "private"
+      CSS_TEST_WRITE: "single"
+      CSS_TEST_ENGINE: "auto"
+      CSS_TEST_CRYPT: "true"
+      CSS_TEST_BACKUP: "none"
+      CSS_TEST_EXPECT_SHARED: "false"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_private_encrypted:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+      restart_policy:
+        condition: none
+
+  shared_single_plain:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "shared_single_plain"
+      CSS_TEST_VOLUME: "css_shared_single_plain"
+      CSS_TEST_MODE: "shared"
+      CSS_TEST_WRITE: "single"
+      CSS_TEST_ENGINE: "auto"
+      CSS_TEST_CRYPT: "false"
+      CSS_TEST_BACKUP: "none"
+      CSS_TEST_EXPECT_SHARED: "true"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_shared_single_plain:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+      restart_policy:
+        condition: none
+
+  shared_single_encrypted:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "shared_single_encrypted"
+      CSS_TEST_VOLUME: "css_shared_single_encrypted"
+      CSS_TEST_MODE: "shared"
+      CSS_TEST_WRITE: "single"
+      CSS_TEST_ENGINE: "auto"
+      CSS_TEST_CRYPT: "true"
+      CSS_TEST_BACKUP: "none"
+      CSS_TEST_EXPECT_SHARED: "true"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_shared_single_encrypted:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+      restart_policy:
+        condition: none
+
+  backup_auto_plain:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "backup_auto_plain"
+      CSS_TEST_VOLUME: "css_backup_auto_plain"
+      CSS_TEST_MODE: "private"
+      CSS_TEST_WRITE: "single"
+      CSS_TEST_ENGINE: "auto"
+      CSS_TEST_CRYPT: "false"
+      CSS_TEST_BACKUP: "auto"
+      CSS_TEST_EXPECT_SHARED: "false"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_backup_auto_plain:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+          - node.labels.css.test.backup == true
+      restart_policy:
+        condition: none
+
+  shared_multi_sqlite_probe:
+    image: busybox:1.36
+    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    configs:
+      - source: css_scenario_workload
+        target: /usr/local/bin/css-scenario-workload
+        mode: 0555
+    environment:
+      CSS_TEST_RUN_ID: "${CSS_TEST_RUN_ID}"
+      CSS_TEST_EXPECT_NODES: "${CSS_TEST_EXPECT_NODES}"
+      CSS_TEST_SETTLE_SECONDS: "${CSS_TEST_SETTLE_SECONDS}"
+      CSS_TEST_SCENARIO: "shared_multi_sqlite_probe"
+      CSS_TEST_VOLUME: "css_shared_multi_sqlite_probe"
+      CSS_TEST_MODE: "shared"
+      CSS_TEST_WRITE: "multi"
+      CSS_TEST_ENGINE: "sqlite"
+      CSS_TEST_CRYPT: "false"
+      CSS_TEST_BACKUP: "none"
+      CSS_TEST_EXPECT_SHARED: "true"
+      NODE_NAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
+      TASK_SLOT: "{{.Task.Slot}}"
+    volumes:
+      - css_shared_multi_sqlite_probe:/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.labels.css.test.enabled == true
+          - node.labels.css.test.sqlite == true
+      restart_policy:
+        condition: none
+
+configs:
+  css_scenario_workload:
+    file: ../scenario-test/workload.sh
+
+volumes:
+  css_private_plain:
+    driver: css
+    driver_opts:
+      cs.mode: private
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "false"
+      cs.backup: none
+      flush: "true"
+
+  css_private_encrypted:
+    driver: css
+    driver_opts:
+      cs.mode: private
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "true"
+      cs.backup: none
+      flush: "true"
+
+  css_shared_single_plain:
+    driver: css
+    driver_opts:
+      cs.mode: shared
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "false"
+      cs.backup: none
+      flush: "true"
+
+  css_shared_single_encrypted:
+    driver: css
+    driver_opts:
+      cs.mode: shared
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "true"
+      cs.backup: none
+      flush: "true"
+
+  css_backup_auto_plain:
+    driver: css
+    driver_opts:
+      cs.mode: private
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "false"
+      cs.backup: auto
+      flush: "true"
+
+  css_shared_multi_sqlite_probe:
+    driver: css
+    driver_opts:
+      cs.mode: shared
+      cs.write: multi
+      cs.engine: sqlite
+      cs.crypt: "false"
+      cs.backup: none
+      flush: "true"

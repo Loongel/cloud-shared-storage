@@ -135,3 +135,22 @@ volumes:
 ```
 
 The `cs.*` option names are unchanged.
+
+## Delivery Scenario Test
+
+Run the formal Stack workload test after installation:
+
+```sh
+sudo sh scripts/css-scenario-test-deploy.sh --clean --current-node
+```
+
+For multi-node validation after every client node is installed:
+
+```sh
+sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes
+```
+
+Reports are written to `reports/css-scenario-<run-id>/`. The stack schedules
+only on nodes labelled by the deploy script and uses the host `css` driver. This
+test stack is kept in the repository as an acceptance tool; it is not installed
+into the production `.deb`.

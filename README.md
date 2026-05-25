@@ -179,6 +179,7 @@ This repository now includes production-oriented deployment scaffolding:
 - `deploy/stack/cs-storage-server.yml`: Swarm Stack template for the S-side gateway.
 - `deploy/stack/cs-storage-daemon-global.yml` and `deploy/stack/cs-storage-plugin-global.yml`: legacy Swarm validation templates. They are not the formal production client runtime; the formal client runtime is the host `cs-storage-daemon.service` plus `cs-storage-plugin.service`.
 - `deploy/stack/example-app.yml`: example app volume declaration using labels that `cs-storage-admin render-compose` converts into `driver_opts`.
+- `deploy/stack/css-scenario-test.yml`: post-install validation stack for the host `css` driver. It is a repository test artifact, not part of the production `.deb`; it mounts real CSS volumes on labelled nodes and pairs with `scripts/css-scenario-test-deploy.sh` / `scripts/css-scenario-test-report.sh` to produce pass/fail reports with direct WebDAV backend checks.
 
 ## Host Systemd Install
 
@@ -266,6 +267,29 @@ The one-command wrappers intentionally avoid surprising secret changes:
 
 See `docs/install-guide.md` for scenario commands, parameter details, repeat
 install behavior, and common failure handling.
+
+## Formal Scenario Stack Test
+
+After installing the host systemd services, validate the delivered `css` driver
+with the scenario stack:
+
+```sh
+sudo sh scripts/css-scenario-test-deploy.sh --clean --current-node
+```
+
+After installing client services on every target Swarm node:
+
+```sh
+sudo sh scripts/css-scenario-test-deploy.sh --clean --all-ready-nodes
+```
+
+The stack only schedules on nodes labelled `css.test.enabled=true`. The deploy
+script applies that label to selected nodes, runs private/plain,
+private/encrypted, shared-single/plain, and shared-single/encrypted workloads,
+then writes `reports/css-scenario-<run-id>/results.tsv` and `report.md`. See
+`docs/scenario-test-guide.md` for optional backup and shared-multi SQLite probes.
+Use `--clear-labels` if you want the script to remove its temporary
+`css.test.*` node labels after reporting.
 
 ## Build on hd01
 
