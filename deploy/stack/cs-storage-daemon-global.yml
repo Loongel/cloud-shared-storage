@@ -1,0 +1,90 @@
+services:
+  daemon:
+    image: ${CS_STORAGE_IMAGE:-cs-storage:latest}
+    entrypoint: ["/usr/local/bin/cs-storage-daemon"]
+    environment:
+      CS_DAEMON_SOCKET: /run/cs-storage.sock
+      CS_ROOT_DIR: /mnt/cs_storage/vols
+      CS_STATE_PATH: /mnt/cs_storage/vols/.state/volumes.json
+      CS_AUDIT_LOG: /mnt/cs_storage/vols/.state/audit.jsonl
+      CS_SERVER_URL: "${CS_SERVER_URL:?set CS_SERVER_URL}"
+      CS_NODE_ID: "{{.Node.Hostname}}"
+      CS_NODE_SECRET_KEY: "${CS_NODE_SECRET_KEY:-}"
+      CS_NODE_SECRET_KEY_FILE: "${CS_NODE_SECRET_KEY_FILE:-}"
+      CS_ENABLE_CHATTR: "${CS_ENABLE_CHATTR:-true}"
+      CS_RECOVER_MOUNTS: "${CS_RECOVER_MOUNTS:-true}"
+      CS_MANAGED_VOLUMES: "${CS_MANAGED_VOLUMES:-}"
+      CS_MANAGED_ENSURE_INTERVAL: "${CS_MANAGED_ENSURE_INTERVAL:-30s}"
+      CS_RCLONE_ENDPOINT: "${CS_RCLONE_ENDPOINT:-}"
+      CS_RCLONE_BINARY: "${CS_RCLONE_BINARY:-rclone}"
+      CS_RCLONE_RC_ADDR: "${CS_RCLONE_RC_ADDR:-}"
+      CS_RCLONE_RC_USER: "${CS_RCLONE_RC_USER:-}"
+      CS_RCLONE_RC_PASSWORD: "${CS_RCLONE_RC_PASSWORD:-}"
+      CS_RCLONE_RC_PASSWORD_FILE: "${CS_RCLONE_RC_PASSWORD_FILE:-}"
+      CS_RCLONE_VFS_CACHE_MODE: "${CS_RCLONE_VFS_CACHE_MODE:-writes}"
+      CS_RCLONE_VFS_WRITE_BACK: "${CS_RCLONE_VFS_WRITE_BACK:-}"
+      CS_RCLONE_VFS_CACHE_MAX_SIZE: "${CS_RCLONE_VFS_CACHE_MAX_SIZE:-}"
+      CS_RCLONE_EXTRA_ARGS: "${CS_RCLONE_EXTRA_ARGS:-}"
+      CS_RCLONE_SYNC_INTERVAL: "${CS_RCLONE_SYNC_INTERVAL:-}"
+      CS_RCLONE_SYNC_SOURCE: "${CS_RCLONE_SYNC_SOURCE:-}"
+      CS_RCLONE_SYNC_TARGET: "${CS_RCLONE_SYNC_TARGET:-}"
+      CS_GOCRYPTFS_BINARY: "${CS_GOCRYPTFS_BINARY:-gocryptfs}"
+      CS_GOCRYPTFS_PASSWORD: "${CS_GOCRYPTFS_PASSWORD:-}"
+      CS_GOCRYPTFS_PASSWORD_FILE: "${CS_GOCRYPTFS_PASSWORD_FILE:-}"
+      CS_GOCRYPTFS_EXTRA_ARGS: "${CS_GOCRYPTFS_EXTRA_ARGS:-}"
+      CS_GLUSTER_BINARY: "${CS_GLUSTER_BINARY:-mount.glusterfs}"
+      CS_GLUSTER_REMOTE: "${CS_GLUSTER_REMOTE:-}"
+      CS_GLUSTER_EXTRA_ARGS: "${CS_GLUSTER_EXTRA_ARGS:-}"
+      CS_LITEFS_BINARY: "${CS_LITEFS_BINARY:-litefs}"
+      CS_LITEFS_CONFIG: "${CS_LITEFS_CONFIG:-}"
+      CS_LITEFS_HTTP_ADDR: "${CS_LITEFS_HTTP_ADDR:-:20202}"
+      CS_LITEFS_LEASE_TYPE: "${CS_LITEFS_LEASE_TYPE:-consul}"
+      CS_LITEFS_CONSUL_URL: "${CS_LITEFS_CONSUL_URL:-}"
+      CS_LITEFS_CONSUL_KEY: "${CS_LITEFS_CONSUL_KEY:-}"
+      CS_LITEFS_CONSUL_TTL: "${CS_LITEFS_CONSUL_TTL:-10s}"
+      CS_LITEFS_CONSUL_LOCK_DELAY: "${CS_LITEFS_CONSUL_LOCK_DELAY:-1s}"
+      CS_LITEFS_CONSUL_TOKEN: "${CS_LITEFS_CONSUL_TOKEN:-}"
+      CS_LITEFS_CONSUL_TOKEN_FILE: "${CS_LITEFS_CONSUL_TOKEN_FILE:-}"
+      CS_LITEFS_HOSTNAME: "${CS_LITEFS_HOSTNAME:-}"
+      CS_LITEFS_ADVERTISE_URL: "${CS_LITEFS_ADVERTISE_URL:-http://{{.Node.Hostname}}:20202}"
+      CS_LITEFS_PROMOTE: "${CS_LITEFS_PROMOTE:-false}"
+      CS_LITEFS_CANDIDATE: "${CS_LITEFS_CANDIDATE:-true}"
+      CS_KOPIA_BINARY: "${CS_KOPIA_BINARY:-kopia}"
+      CS_KOPIA_REPOSITORY: "${CS_KOPIA_REPOSITORY:-}"
+      CS_KOPIA_CONFIG_PATH: "${CS_KOPIA_CONFIG_PATH:-}"
+      CS_KOPIA_PASSWORD: "${CS_KOPIA_PASSWORD:-}"
+      CS_KOPIA_PASSWORD_FILE: "${CS_KOPIA_PASSWORD_FILE:-}"
+      CS_KOPIA_EXTRA_ARGS: "${CS_KOPIA_EXTRA_ARGS:-}"
+      CS_KOPIA_SNAPSHOT_INTERVAL: "${CS_KOPIA_SNAPSHOT_INTERVAL:-1h}"
+      CS_KOPIA_POLICY_ARGS: "${CS_KOPIA_POLICY_ARGS:-}"
+      CS_ROUTER_BINARY: "${CS_ROUTER_BINARY:-cs-storage-router}"
+      CS_ROUTER_EXTRA_ARGS: "${CS_ROUTER_EXTRA_ARGS:-}"
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - type: bind
+        source: /run
+        target: /run
+      - type: bind
+        source: /mnt/cs_storage/vols
+        target: /mnt/cs_storage/vols
+        bind:
+          propagation: rshared
+      - type: bind
+        source: /var/log/cs-storage
+        target: /var/log/cs-storage
+      - type: bind
+        source: ${CS_SECRET_HOST_DIR:-/etc/cs-storage/secrets}
+        target: ${CS_SECRET_CONTAINER_DIR:-/run/cs-storage-secrets}
+        read_only: true
+    devices:
+      - /dev/fuse:/dev/fuse
+    deploy:
+      mode: global
+      restart_policy:
+        condition: any
+      placement:
+        constraints:
+          - node.platform.os == linux

@@ -1,0 +1,11 @@
+/.agent-state/
+/.agents/
+/.codex/
+/.git/
+/bin/
+/dist/
+/tmp/
+/cs-storage-server
+/%s,*
+*.log
+*.BAK.*

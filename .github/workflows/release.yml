@@ -1,0 +1,93 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without v prefix'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: true
+
+      - name: Extract optional runtime tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+          docker pull flyio/litefs:0.5
+          cid="$(docker create flyio/litefs:0.5)"
+          docker cp "$cid:/usr/local/bin/litefs" bin/litefs
+          docker rm "$cid"
+          docker pull kopia/kopia:0.23
+          cid="$(docker create kopia/kopia:0.23)"
+          docker cp "$cid:/usr/bin/kopia" bin/kopia
+          docker rm "$cid"
+          chmod 0755 bin/litefs bin/kopia
+
+      - name: Build Debian package
+        run: ./scripts/cs-storage-build-deb.sh --version "${{ steps.version.outputs.version }}" --build-binaries
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb" > "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+          cat "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-storage-deb-${{ steps.version.outputs.version }}
+          path: |
+            dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb
+            dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "dist/cs-storage_${VERSION}_amd64.deb" "dist/cs-storage_${VERSION}_amd64.deb.sha256" --clobber
+          else
+            gh release create "$tag" \
+              "dist/cs-storage_${VERSION}_amd64.deb" \
+              "dist/cs-storage_${VERSION}_amd64.deb.sha256" \
+              --title "CS-Storage $tag" \
+              --notes "Host systemd CS-Storage release package. Install with scripts/cs-storage-systemd-node-install.sh --deb-url <asset-url>."
+          fi

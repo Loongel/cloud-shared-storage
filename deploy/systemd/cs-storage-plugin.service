@@ -1,0 +1,17 @@
+[Unit]
+Description=CS-Storage Docker VolumeDriver thin proxy
+After=docker.service cs-storage-daemon.service
+Requires=docker.service cs-storage-daemon.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/cs-storage/plugin.env
+ExecStartPre=/usr/bin/mkdir -p /run/docker/plugins
+ExecStart=/usr/local/bin/cs-storage-plugin
+Restart=always
+RestartSec=3s
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

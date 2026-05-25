@@ -1,0 +1,17 @@
+services:
+  app:
+    image: busybox:1.36
+    command: ["sh", "-c", "date > /data/started.txt; sleep 300"]
+    volumes:
+      - app-data:/data
+    deploy:
+      replicas: 1
+volumes:
+  app-data:
+    driver: cs-storage
+    labels:
+      cs.mode: shared
+      cs.write: single
+      cs.engine: auto
+      cs.crypt: "true"
+      cs.backup: none

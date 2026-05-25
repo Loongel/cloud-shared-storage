@@ -1,0 +1,21 @@
+[Unit]
+Description=CS-Storage S-side gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/cs-storage/server.env
+ExecStart=/usr/local/bin/cs-storage-server
+Restart=always
+RestartSec=3s
+User=cs-storage
+Group=cs-storage
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cs-storage /var/log/cs-storage
+
+[Install]
+WantedBy=multi-user.target

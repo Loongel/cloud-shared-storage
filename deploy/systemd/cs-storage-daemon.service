@@ -1,0 +1,19 @@
+[Unit]
+Description=CS-Storage C-side host daemon
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/cs-storage/daemon.env
+ExecStartPre=/usr/bin/mkdir -p /run /mnt/cs_storage/vols /var/lib/cs-storage /var/log/cs-storage
+ExecStart=/usr/local/bin/cs-storage-daemon
+Restart=always
+RestartSec=3s
+User=root
+Group=root
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

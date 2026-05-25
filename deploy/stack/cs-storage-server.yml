@@ -1,0 +1,41 @@
+services:
+  gateway:
+    image: ${CS_STORAGE_IMAGE:-cs-storage:latest}
+    entrypoint: ["/usr/local/bin/cs-storage-server"]
+    environment:
+      CS_SERVER_ADDR: ":8080"
+      CS_NODE_SECRET_KEY: "${CS_NODE_SECRET_KEY:-}"
+      CS_NODE_SECRET_KEY_FILE: "${CS_NODE_SECRET_KEY_FILE:-}"
+      CS_BACKEND_URL: "${CS_BACKEND_URL:?set CS_BACKEND_URL}"
+      CS_BACKEND_AUTH_HEADER: "${CS_BACKEND_AUTH_HEADER:-}"
+      CS_BACKEND_AUTH_HEADER_FILE: "${CS_BACKEND_AUTH_HEADER_FILE:-}"
+      CS_BACKEND_USER: "${CS_BACKEND_USER:-}"
+      CS_BACKEND_USER_FILE: "${CS_BACKEND_USER_FILE:-}"
+      CS_BACKEND_PASSWORD: "${CS_BACKEND_PASSWORD:-}"
+      CS_BACKEND_PASSWORD_FILE: "${CS_BACKEND_PASSWORD_FILE:-}"
+      CS_PUBLIC_URL: "${CS_PUBLIC_URL:-}"
+      CS_TOKEN_TTL: "${CS_TOKEN_TTL:-12h}"
+      CS_SANDBOX_PREFIX: "${CS_SANDBOX_PREFIX:-/nodes}"
+      CS_KV_PATH: "/var/lib/cs-storage/gateway-kv.json"
+      CS_COORDINATOR_TOKEN: "${CS_COORDINATOR_TOKEN:-}"
+      CS_COORDINATOR_TOKEN_FILE: "${CS_COORDINATOR_TOKEN_FILE:-}"
+    ports:
+      - target: 8080
+        published: ${CS_SERVER_PORT:-8080}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - gateway-state:/var/lib/cs-storage
+      - type: bind
+        source: ${CS_SECRET_HOST_DIR:-/etc/cs-storage/secrets}
+        target: ${CS_SECRET_CONTAINER_DIR:-/run/cs-storage-secrets}
+        read_only: true
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+volumes:
+  gateway-state:

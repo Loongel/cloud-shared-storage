@@ -1,0 +1,125 @@
+跨国高延迟容器存储管控系统设计与实施细则
+文档说明
+文档版本：v6.0（审阅与完善版）
+更新依据：对原 v5.1 文档进行多角色审阅（研发、产品、技术专家、运维），结合官方资料和业界最佳实践查证，补充缺失环节并澄清关键细节。
+目标读者：后续负责开发、运维和验收的工程师。本设计旨在作为唯一权威依据，独立支撑系统的开发落地。
+1. 业务背景与需求重述
+
+在跨国高延迟（≥ 100 ms）、低计算资源（1C1G/2C2G）场景中，需要为 Docker 微服务提供可靠的持久化存储，并兼顾高可用、数据安全和零侵入。现存方案暴露三类风险：
+
+锁定与性能灾难：POSIX 文件锁在高延迟链路下放大会导致事务型数据库（如 SQLite）I/O 拥堵甚至损坏。
+凭证泄露风险：直接下发 WebDAV/S3 等网盘真实凭证到边缘节点，会在单点失陷时泄露全局存储数据。
+插件进程死锁：传统 Docker Volume 插件会在隔离的容器内启动 FUSE 或重型同步进程，网络抖动会挂死整个 Docker 守护进程。
+
+系统设计目标：
+
+零侵入开发：容器应用无需修改；所有复杂逻辑在宿主机守护进程完成。
+动态链路编排：根据卷策略自动组合 GlusterFS/LiteFS/Gocryptfs/Rclone 等工具链，实现私有挂载、协同写、多节点复制等多维模式。
+强安全性与最小信任：通过 S 端反向代理隐藏真实网盘凭证，使用 HMAC‑SHA256 签发的 JWT 动态授权，落盘数据全部加密。
+易运维与观测：提供明确的配置参数、流程、监控与故障处理指引。
+2. 总体架构与核心组件
+
+系统采用典型的 C/S 架构：边缘节点（C 端）负责卷挂载与存储引擎编排，中央控制（S 端）负责凭证注入、路径重写与网关反代。此设计补足了原文档未说明的“上行出海链路”。
+
+2.1 S 端：中央管控与反代网关
+
+S 端守护进程由 Go 实现，职责包括：
+
+动态授信引擎：利用预共享密钥 NODE_SECRET_KEY 与 HMAC‑SHA256 算法签发 JWT，其中包含节点 ID、有效期与沙箱路径等声明。仅当 C 端持有正确密钥并提供合法签名时才返回 JWT。JWT 中可增加 “engine”、“mode” 等策略声明以简化 C 端逻辑。
+反代路由器：基于 net/http/httputil.ReverseProxy 搭建流式代理，不暴露真实 WebDAV/S3 URL。流程如下：
+拦截所有 C 端 Rclone VFS 发起的请求，解析 Authorization: Bearer <JWT> 头，校验 JWT 签名与时效。
+根据声明，计算真实后端路径（例如请求 PUT /config.json 通过 JWT 映射到 /cloud_root/nodes/<node-id>/config.json）。
+将用户 JWT 从请求头中删除，改为注入后台网盘的真实认证头。Rclone 官方 HTTP 后端提供 --http-headers 参数允许传递额外 Header。
+请求与响应全程流式转发，不落盘、不缓存，内存占用稳定。
+伪装协调器：为了满足 LiteFS 或 GlusterFS 的协作需求，S 端可内嵌一个极轻量的 key‑value 服务（基于 bbolt 或 Etcd 协议），用作租约与主节点选举。对于 GlusterFS，S 端也作为“Arbiter”节点：根据官方文档，arbiter 仅保存文件名和扩展属性，不存储数据，这样可以在不消耗额外磁盘的情况下预防 split‑brain。
+2.2 C 端：宿主机守护与工具链编排
+
+C 端守护进程以 systemd 服务运行，核心模块如下：
+
+事件监听器：与 V2 Volume 插件通过 Unix Domain Socket (UDS) 通信，接收 Create/Mount/Unmount/Remove 操作以及卷参数。
+卷调度器：根据卷参数（详见 4.1 节），在内存中决策是否需要启动 GlusterFS、LiteFS、Gocryptfs、Rclone 等子进程。调度器控制子进程生命周期，设置健康检查和自动重启。
+Go‑FUSE 路由器：实现一个虚拟挂载点，当 engine=auto 时，路由器截取文件系统调用，根据文件名将访问请求分流到不同引擎。例如检测到 *.db 或 *.sqlite 文件即切换到 LiteFS；并记录父目录以保证 *.wal 等伴生文件在同一引擎中一致性处理。
+Rclone 管理器：按需生成 Rclone 配置并启动 VFS 挂载（或同步任务）。Rclone 官方文档指出，VFS 缓存需要设置 --vfs-cache-mode writes 或 full 才能兼容同时读写；同时可通过 --http-headers 插入自定义 Header以携带 JWT。守护进程还负责设置 --cache-dir、--vfs-write-back 等参数，根据磁盘大小调整缓存上限。
+文件系统安全层：对物理挂载根目录执行 chattr +i，将目录设为不可变。根据 Linux 文件系统文档，+i 属性会阻止包括 root 用户在内的任何修改、删除或重命名操作。当 Docker 守护尝试提前创建目录时会收到 “Operation not permitted” 错误，防止裸盘数据被破坏。
+备份与灾备：如果启用 cs.backup=auto，守护进程周期性调用 Kopia，将 Gocryptfs 加密后的本地数据包增量上传至指定后端，实现备份与版本管理。
+2.3 V2 Volume 插件（Docker 插件）
+
+插件仅作为事件代理，严禁在插件容器中执行任何挂载或启动重型进程。它将 Docker 的卷事件打包为 RPC 请求发送给宿主机守护进程，并在 5 秒内等待响应。如超时则向 Docker 返回错误，防止 Docker 守护进程因挂载操作阻塞。
+
+3. 工具链模式与数据流详解
+
+C 端根据驱动参数组合不同链路，核心分为两大模式：单点模式与多写模式。
+
+3.1 单点模式（cs.mode=private 或 shared+cs.write=single）
+
+适用于私有独占或多节点协同但仅有一个节点写入的场景。链路如下：
+
+Docker → V2 Volume 插件 → Go‑FUSE 虚拟层 → Gocryptfs → Rclone VFS → S 端反代 → 实际 WebDAV/S3
+Gocryptfs：作为加密层，通过 FUSE 将明文目录映射为密文目录；加密在用户态完成，密文文件结构对齐原目录；根据介绍，Gocryptfs 提供文件级实时加密，允许同步工具逐文件高效工作。
+Rclone VFS：负责将加密后的本地目录上传到网盘；为适应高延迟网络，应启用 --vfs-cache-mode writes 或 full，允许读写文件时先缓存在本地再异步上传。通过 --http-headers 传递 JWT 到 S 端反代。可以根据卷参数设置缓存目录大小与写回时间。
+下行与上行数据流：所有写入的加密数据经 Rclone 流式传输到 S 端；读请求会首先检查 Rclone 本地缓存，缓存命中则无需跨国访问。
+3.2 多写模式（cs.mode=shared 且 cs.write=multi）
+
+此模式针对多节点需要并发写同一卷的场景。为了保证强一致性引擎，我们提供三种引擎策略：
+
+GlusterFS (cs.engine=static): 通过创建 replica 2 arbiter 1 卷，实现两份数据副本和一个仅存储元数据的 Arbiter。GlusterFS 官方文档指出，arbiter 提供与 replica 3 等效的一致性但只需要一个轻量节点。此引擎适用于文件型工作负载，支持目录级共享。
+LiteFS (cs.engine=sqlite): 针对 SQLite 数据库，使用 LiteFS 作为 FUSE 代理。根据 Fly.io 文档，LiteFS 通过拦截文件系统调用捕获页集并生成事务日志（LTX），异步复制到其他节点。LiteFS 采用租约方式选举主节点以保证只有一个写者。
+自动引擎 (cs.engine=auto): Go‑FUSE 会监控文件名并在发现 *.db/*.sqlite 时自动切换到 LiteFS，其余文件采用 GlusterFS 或本地文件系统。路由器会在内存中登记父目录，确保同一 SQLite 事务相关的日志（如 WAL）落在同一引擎，避免事务跨引擎导致 SQLITE_IOERR。
+
+在多写模式下，Rclone 不直接用于实时同步；取而代之的是：集群内部通过 GlusterFS 或 LiteFS 形成共享卷，只有主节点周期性执行 rclone sync 将加密后的本地数据推送到 S 端。定时间隔和同步窗口由守护进程配置，防止频繁上传浪费带宽。
+
+4. 参数定义与策略说明
+
+下面表格详细列出可配置参数，Opts（在 docker volume create -o 中）优先级高于 Labels。粗体为默认值。
+
+参数名	可选值（默认）	作用域	行为说明
+cs.mode	private, shared	Opts / Label	决定卷是单节点私有还是跨节点共享。shared 时需要结合 cs.write 选择写策略。
+cs.write	single, multi	Opts / Label	仅 shared 有效。single 表示只有一个写者，可直接采用 Rclone VFS；multi 表示多写，需要 GlusterFS/LiteFS 等一致性层。
+cs.engine	auto, static, sqlite	Opts / Label	决定使用的分布式文件系统。static 始终用 GlusterFS；sqlite 始终用 LiteFS；auto 根据文件类型动态分流。
+cs.crypt	true, false	Opts / Label	是否启用 Gocryptfs 加密。禁用时将明文直接发送给 Rclone，但不建议在生产环境关闭。
+cs.backup	none, auto	Opts / Label	是否通过 Kopia 执行本地增量备份并上传。启用时需配置备份周期与保留策略。
+flush	true, false	仅 Opts	破坏性操作标志。create 时若存在旧数据则强制清空；remove 时彻底删除卷数据。禁止在 Compose 中声明。
+4.1 flush 操作规范
+创建卷：docker volume create -o flush=true ... 表示不保留任何旧数据，守护进程将在挂载前调用 os.RemoveAll() 清理卷目录。
+删除卷：普通 docker volume rm 仅卸载但保留数据；带 -o flush=true 时才执行物理擦除。
+5. 安装与部署指南
+
+以下步骤基于 Ubuntu 22.04 宿主机，其他发行版可参考调整。
+
+系统准备：安装必要依赖：glusterfs-client、litefs（从 Fly.io 发布页下载二进制）、gocryptfs、rclone、kopia、docker。确保内核支持 FUSE。
+部署 S 端：
+在可信环境中生成 NODE_SECRET_KEY 并保存。配置 S 端服务端口与网盘后端（WebDAV/S3）。
+启动 S 端服务，暴露 API：/auth 用于签发 JWT；其余路径由反代处理。
+配置 firewall 仅允许 C 端 IP 访问。
+部署 C 端：
+将守护进程二进制安装在 /usr/local/bin/cs-storage-daemon，创建 systemd unit 保证开机自启动。
+配置守护进程：指定 S 端 URL、NODE_SECRET_KEY、本地工作目录（如 /mnt/cs_storage/vols）、默认缓存目录等。
+安装并启用 V2 Volume 插件。插件通过 socket 与守护进程通信，需映射宿主机 /run/cs-storage.sock。
+创建卷：通过 docker volume create -d cs-storage -o cs.mode=shared -o cs.write=multi -o cs.engine=auto ... <vol_name> 创建卷。此时插件会向守护进程发送请求，守护进程根据策略启动相应引擎并返回挂载点。
+6. 监控、日志与故障处理
+日志规范：守护进程应分别记录各组件（Rclone、GlusterFS、LiteFS、Gocryptfs）的 stdout/stderr，并按卷、模块分目录存放，便于审计。关键操作（创建、挂载、同步失败）需要归档到系统日志。
+性能指标：建议结合 node_exporter 和自定义 metrics 暴露以下指标：Rclone 上传/下载速率、VFS 缓存命中率、GlusterFS client IOPS、LiteFS LTX 队列长度、JWT 验证失败次数。
+故障处理：
+如果 C 端守护进程崩溃，Docker 挂载会失败；用户须先恢复守护进程再重新执行 docker-compose up，确保 chattr +i 阻止任何裸盘目录生成。
+当网络异常导致 Rclone 上传卡顿，可通过缓存参数和 --vfs-write-back 调整上传时间；Rclone 在 --vfs-cache-mode writes 下会在文件关闭后写回。
+对于 LiteFS，如果发现主节点不可用，可通过 S 端协调器触发重新选主并同步最新数据，以免旧主写入未传播导致分叉。
+7. 核心验收与测试方案
+
+为确保系统按设计工作，交付前必须完成以下验证：
+
+反代安全测试：截获 C 端生成的 Rclone config，记录其中的 --http-headers 配置和 JWT。使用该 JWT 伪造请求访问其他节点路径，确认 S 端始终重写请求到正确的节点沙箱或返回 403 Forbidden。
+流式上传压力测试：通过 Rclone 向卷写入 ≥10 GB 大文件，监控 S 端进程内存；根据 Rclone 文档，VFS 上传时缓存区应受控且不会无限增长。
+Docker 抢跑熔断测试：停止 C 端守护进程后执行 docker-compose up，应立即报告挂载失败并且宿主机 /mnt/cs_storage/vols/<vol_name> 不会生成新目录。chattr +i 属性确保目录不可被创建。
+SQLite 强一致测试：设置 cs.engine=auto 与 cs.write=multi，在两个地理节点并发写入同一 SQLite 数据库，观察 LiteFS 将事务转化为 LTX 文件并通过租约选主；测试结束后运行 PRAGMA integrity_check 应返回 ok，说明事务未损坏。
+GlusterFS 分布式一致性测试：创建 cs.engine=static 卷，在两节点分别新建/修改/删除文件，确认另一节点实时看到最新内容；同时拔掉一节点网络，验证 arbiter 模式避免 split‑brain。
+8. 结论
+
+本细化设计在原方案基础上增加了完整的上行链路和安全机制说明，补充了工具配置、故障处理和验收流程，并通过查阅官方资料验证了关键技术可行性：
+
+Rclone 支持通过 --http-headers 添加自定义 HTTP Header，从而携带 JWT 在反代中进行认证与路径映射。
+VFS 缓存模式需设为 writes/full 才能保证读写兼容，且缓存目录和写回时间可调。
+Gocryptfs 通过 FUSE 实现文件级实时加解密，适合同步任务。
+LiteFS 通过 FUSE 拦截 SQLite 的页写入并异步复制，依赖租约选举主节点；GlusterFS 的 arbiter 模式在不增加磁盘开销的情况下防止 split‑brain。
+Linux 的 chattr +i 可将目录设为不可变，任何写入或删除都会被内核拒绝。
+
+按本文档实施后，可构建一个跨国高延迟环境下安全、可靠、便捷的容器存储管控系统，满足无代码改动、动态编排、高度安全的全栈需求。

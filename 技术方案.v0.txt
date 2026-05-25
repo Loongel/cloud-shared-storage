@@ -1,0 +1,179 @@
+这份补全是对架构拓扑图的**关键性致命闭环**。
+
+之前版本的架构图确实存在视角盲区：仅刻画了“容器到宿主机的向下落盘流向”，而遗漏了“宿主机最终如何向上出海（Egress）、Rclone VFS 如何与 S 端代理完成闭环”的**核心上行数据流**。
+
+现将该链路严密地整合进全局拓扑中，重新梳理出包含数据出海与反代握手的《最终版开发与架构设计规范》。
+
+---
+
+# 跨国高延迟分布式容器存储管控系统 (CS-Storage) 开发与架构设计规范
+
+**文档版本：** v5.1 (Final Release)
+**核心架构：** 全栈 Golang / 零信任 C/S 架构 / 动态链路编排 / 内存级 FUSE 路由
+
+## 1. 系统概述与核心需求矩阵
+
+### 1.1 业务背景与架构痛点
+
+在跨国、高网络延迟（100ms+）、低计算资源（1C1G/2C2G）的边缘物理节点中部署容器化微服务时，传统分布式存储方案存在三大物理矛盾：
+
+1. **网络锁灾难：** 高延迟下，POSIX 文件锁会导致强事务型应用（如 SQLite）产生严重 I/O 拥塞，极易导致数据库物理损坏。
+2. **凭证爆炸半径：** 若直接下发底层云网盘（WebDAV/S3）真实凭证至边缘节点，单点被黑客拔盘突破将导致全局数据沦陷。
+3. **插件生命周期死锁：** 传统 Docker Volume 插件在隔离 Namespace 中强行挂载重型 FUSE 驱动，极易因网络抖动导致 Docker 守护进程级锁死（Hang）。
+
+### 1.2 核心特性与三维策略矩阵
+
+本系统旨在构建一套轻量、零侵入、高可用的存储基础设施，**容器端应用无需修改任何代码**。系统必须支持以下挂载策略组合：
+
+* **隔离拓扑 (Topology):** `Private`（单点独占） / `Shared`（全集群多端跨节点协同）。
+* **引擎路由 (Engine):** `GlusterFS`（常规静态文件共享） / `LiteFS`（SQLite 强事务保护） / `Auto`（智能动态分流）。
+* **安全与灾备 (Sec & DR):** `Gocryptfs` 强加密落盘 / `Kopia` 本地增量大包 / `Rclone VFS` 向上出海同步。
+
+---
+
+## 2. 系统全局拓扑与核心数据流图 (Architecture Topology)
+
+系统采用严格的 **C/S (Client/Server)** 架构，补全了从 Docker 挂载到底层落盘，再到 **Rclone VFS 向上通过 S 端反代网关完成凭证注水与路由映射** 的全景生命周期。
+
+```text
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                      S端：零信任中央管控与反代网关 (Go)                     │
+ │                                                                             │
+ │  ┌─────────────────┐    ┌───────────────────────────────────┐   ┌────────┐  │
+ │  │ 1. 动态授信引擎 │    │ 2. 反代路由与沙箱映射 (Reverse Proxy)│   │ 最终   │  │
+ │  │ (签发专属 JWT)  │    │ 拦截请求 -> 提取并擦除 JWT ->         │──▶│ Master │  │
+ │  └────────┬────────┘    │ 拼接真实沙箱子路径 -> 注入S3/WebDAV账密│   │ (网盘) │  │
+ │           │ (下发JWT)   └─────────────────▲─────────────────┘   └────────┘  │
+ └───────────┼───────────────────────────────┼─────────────────────────────────┘
+             │                               │ (纯流式传输，跨国 100ms+ 网络)
+ ┌───────────┼───────────────────────────────┼─────────────────────────────────┐
+ │           ▼           C端：边缘物理节点 (宿主机)                            │
+ │ ┌──────────────────┐               ┌──────┴───────────────────────────────┐ │
+ │ │   Docker Engine  │               │ Egress 数据出海层 (Rclone VFS)       │ │
+ │ │ ┌──────────────┐ │ (UDS)         │ 目标端点: S端指定的入口 URL          │ │
+ │ │ │ Volume V2插件├─┼────(RPC)─────▶│ 认证方式: Header 携带 JWT 令牌       │ │
+ │ │ └──────┬───────┘ │               └──────▲───────────────────────────────┘ │
+ │ │        │ 挂载    │                      │ (后台异步大包或流式刷盘)        │
+ │ │ ┌──────▼───────┐ │               ┌──────┴───────────────────────────────┐ │
+ │ │ │ 容器应用(App)│ │               │ C端 Node Daemon (Go Systemd 服务)    │ │
+ │ │ └──────────────┘ │               │ 1. 工具链编排 (按需守护 Rclone 进程) │ │
+ │ └──────────────────┘               │ 2. Go-FUSE 内存级动态分流路由        │ │
+ │                                    │ 3. 进程看门狗 (GlusterFS/LiteFS)     │ │
+ │                                    └──────┬───────────────────────────────┘ │
+ │                                           │ (底层物理映射 & Gocryptfs 实时加密)│
+ │                                    ┌──────▼───────────────────────────────┐ │
+ │                                    │ 物理磁盘: /mnt/cs_storage/vols/...   │ │
+ │                                    └──────────────────────────────────────┘ │
+ └─────────────────────────────────────────────────────────────────────────────┘
+
+```
+
+### 2.1 S 端：中央管控网关 (Storage Gateway)
+
+S 端作为全网唯一持有最终 Master 存储真实凭证的节点，履行三大职能：
+
+1. **IAM 动态授信引擎：**
+* 采用预共享密钥（`NODE_SECRET_KEY`）。C 端通过 HMAC-SHA256 签名换取包含节点专属隔离沙箱声明（Claims）的 **JWT 令牌**。
+
+
+2. **流式反代与路径隐式映射（核心安全机制）：**
+* 基于标准库 `net/http/httputil` 的 ReverseProxy。
+* C 端的 Rclone 不直接连接真实的 WebDAV/S3，而是将 S 端的 URL 作为远端（Remote）。
+* **请求劫持：** 拦截 C 端发来的读写流，提取 JWT 并进行身份核验。
+* **自动映射：** 根据 JWT 确认该节点为 `Node-A`，S 端在内存中动态将请求路径（如 `PUT /config.json`）**重写**为最终存储后端的绝对沙箱路径（如 `PUT /cloud_root/nodes/Node-A/config.json`）。
+* **凭证注入：** 擦除请求头中的 JWT 令牌，**隐式注入** OpenList 的真实 WebDAV/S3 凭证（如 `Authorization: Basic XXX`）。整个过程纯流式、零落盘、极低内存开销。
+
+
+3. **轻量级伪装控制面（Mock Coordinator）：**
+* 充当 GlusterFS `replica 3 arbiter 1` 架构中的零硬盘开销 Arbiter 投票节点。
+* 基于 `bbolt` 提供兼容 Consul KV API 的极简服务，伪装分布式锁，解决 LiteFS 依赖问题。
+
+
+
+### 2.2 C 端：节点编排守护进程与 Egress 出海映射
+
+部署为 Systemd 独立服务的 Go 进程，它是真正统筹所有底层存储引擎（Gluster/LiteFS/Gocryptfs）并在最终将其推向 Rclone 的指挥官。
+
+* **Egress (出海) 链路的按需挂载：**
+C 端接收到 V2 插件的挂载指令后，若策略要求连接后端网盘，C 端会拉起 **Rclone VFS 守护进程**。
+Rclone 的配置文件由 C 端动态生成，其远端指向 `https://<S端IP>`，并携带自定义 Header：`Authorization: Bearer <JWT>`。
+* **物理熔断机制（防 Docker 抢跑）：**
+C 端在初始化根目录时，调用 `chattr +i` 将父目录不可变锁定。若挂载链路未就绪，Docker 尝试在裸盘上创建目录将被 Linux 内核强行拒绝（Permission Denied）。
+
+### 2.3 V2 卷插件：极轻量事件代理 (Thin Proxy)
+
+* 基于 `docker/go-plugins-helpers/volume` 开发。
+* **架构红线：** 插件容器内部**严禁**执行挂载、严禁运行 FUSE、严禁运行 Rclone。
+* 仅负责将 Docker 的 `Create/Mount/Unmount/Remove` 转化为 JSON RPC 投递给宿主机的 C 端 Daemon。包裹 5 秒硬超时限制，若 C 端崩溃，插件立刻向 Docker 抛出 Error，彻底熔断 Docker Daemon 级卡死。
+
+---
+
+## 3. C 端物理链路映射与工具链编排 (`mode` 与 `write` 调度)
+
+根据容器传入的卷驱动参数，C 端会自动组装不同的工具链路拓扑（Toolchain Pipeline）。
+
+### 3.1 链路 A：私有独占或单写模式 (`Private` 或 `Shared Single-Write`)
+
+当业务不涉及跨节点并发写入时，**不启动 GlusterFS 或 LiteFS**。
+
+* **数据流向 (Top-Down)：**
+`Docker  volume  our v2 driver` $\rightarrow$ `Gocryptfs (实时加密)` $\rightarrow$ **`Rclone VFS 挂载点`** $\rightarrow$ `S端反代网关`
+* **链路说明：** Rclone VFS 提供极佳的本地缓存性能。数据经由 Gocryptfs 加密后直接喂给 Rclone，Rclone 携带 JWT 请求 S 端反代完成数据物理落盘。
+
+### 3.2 链路 B：跨节点并发多写模式 (`Shared Multi-Write`)
+
+当多节点需并发改写同一卷时，必须插入强一致性的分布式基座，防范远端网盘覆写冲突。
+
+* **数据流向 (Top-Down)：**
+`Docker  volume  our v2 driver` $\rightarrow$ **`Go-FUSE 内存动态分流层 (详见3.3节)`** $\rightarrow$ 分流至 `LiteFS` 或 `GlusterFS` $\rightarrow$ `Gocryptfs 加密` $\rightarrow$ `本地物理盘`
+**旁路出海：** 依靠集群选举唯一的主节点，由 C 端拉起该主节点上的 `Rclone sync` 定时将本地盘的密文数据推流至 S 端网关。
+
+### 3.3 Go-FUSE 内存动态分流技术 (`engine=auto`)
+
+当指定 `engine=auto` 时，C 端在内存中虚拟聚合挂载点，拦截 `Create/Open` 核心 Syscall，实现 0 侵入分流：
+
+* **联动锁定机制：** 侦测到 `*.db` 或 `*.sqlite` 文件时，路由引擎将该文件指向 LiteFS 视图，并**将其所在的父级目录路径注册至内存路由表**。
+* **原子性保障：** 命中该目录的所有后续文件（如伴生的 `*-wal` 日志），强制无条件路由至 LiteFS。确保 SQLite 事务文件处于同一物理引擎下，根除跨引擎错配导致的 `SQLITE_IOERR`。
+
+---
+
+## 4. Volume 驱动参数与物理抹除规范
+
+系统通过 `Driver Opts (-o)` 和 `Volume Labels` 接收配置。Opts 优先级最高。
+
+| 参数关键字 | 枚举值 (加粗为默认值) | 生效层级 | 架构行为定义 |
+| --- | --- | --- | --- |
+| `cs.mode` | **`private`** / `shared` | Opts, Labels | 资源隔离拓扑：私有独占或跨节点协同。 |
+| `cs.write` | **`single`** / `multi` | Opts, Labels | 仅 `shared` 模式有效。决定链路走纯 Rclone 还是拉起分布式集群引擎。 |
+| `cs.engine` | **`auto`** / `static` / `sqlite` | Opts, Labels | `static` 走 GlusterFS，`sqlite` 走 LiteFS，`auto` 启用 Go-FUSE 动态分流。 |
+| `cs.crypt` | **`true`** / `false` | Opts, Labels | 是否启用 Gocryptfs 加解密。 |
+| `cs.backup` | **`none`** / `auto` | Opts, Labels | 触发本地 Kopia 进程执行定时打包与增量上云。 |
+| `flush` | `true` / **`false`** | **仅限 Opts** | 绝对破坏性指令（详见下文）。 |
+
+### 4.1 `--flush` 参数物理强限规范
+
+`flush` 具有不可逆破坏性，**严禁在 Compose / Labels 中声明**。
+
+* **创建（Create）：** `docker volume create -o flush=true`。若存在历史旧数据，C 端立即执行 `os.RemoveAll()` 确保环境纯净。
+* **销毁（Remove）：** 默认 `docker volume rm` 时，C 端**仅执行 Unmount**，数据归档保留。仅在带 `-o flush=true` 时，才彻底物理擦除对应数据块。
+
+---
+
+## 5. 项目验收核心检查项 (Acceptance Criteria)
+
+交付前，必须 100% 阻断式通过以下系统级验证：
+
+1. **Rclone Egress 反代越权与流式穿透测试：**
+* *操作 A：* 提取 C 端 Node-A 发给 Rclone 的配置文件，抓取其 HTTP 请求及 Header 中的 JWT，尝试向 S 端修改请求路径至 `/vols/nodes/Node-B/`。
+* *标准 A：* S 端 Go 进程必须不认 C 端的指定路径，强制重写为其 JWT 中授权的正确路径，或者直接返回 `403 Forbidden`。
+* *操作 B：* 通过 Rclone 持续向网盘推送 10GB 大包。
+* *标准 B：* S 端 Go 进程内存波动幅度不得超过 50MB，且底层网盘接收到完整文件。
+
+
+2. **Docker 抢跑熔断验证：**
+* 停止 C 端 Daemon，执行 `docker-compose up`。系统必须报错挂载失败，宿主机裸盘绝对不得产生被创建的空卷目录。
+
+
+3. **SQLite 事务并发与 Go-FUSE 联动测试：**
+* 配置 `engine=auto` 和 `shared multi`。异地两节点并发高频写入同一 SQLite 数据库。
+* 测试结束后执行 `PRAGMA integrity_check` 必须返回 `ok`，验证 LiteFS 转发及伴生 WAL 日志文件的联动路由是否 100% 准确。</S端IP>
