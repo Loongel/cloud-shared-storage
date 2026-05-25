@@ -361,7 +361,7 @@ FORMAL_DRIVER_NODE_OK node=ora01 volume=cs-formal-verify-ora01-fixed2 file=forma
 FORMAL_DRIVER_NODE_OK node=ora02 volume=cs-formal-verify-ora02-fixed2 file=formal-global-ora02-fixed2.txt
 FORMAL_DRIVER_NODE_OK node=wawo01 volume=cs-formal-verify-wawo01-fixed2 file=formal-global-wawo01-fixed2.txt
 FORMAL_WEBDAV_REMOTE_GET_OK nodes=4 files=hd01,ora01,ora02,wawo01 status=200 backend=https://rausu.infini-cloud.net/dav/nodes/
-DEB_BUILD_OK path=dist/cs-storage_0.1.0_amd64.deb sha256=8c88223e9fef9df3b12fc60f6ce1732a66a7f223fc6191eccfdc5e21db18be95 source=GitHub-Actions
+DEB_BUILD_OK path=dist/cs-storage_0.1.0_amd64.deb sha256=bddd08aab00145cb79cca3c8a34f6b9df7126195d7c29268a18dc76f2306143b source=GitHub-Actions
 CSS_SYSTEMD_NODE_INSTALL_OK role=all node=hd01 driver=css env_dir=/etc/cs-storage prefix=/usr/local/bin
 SYSTEMD_SERVICES_ACTIVE enabled=3 active=3 services=cs-storage-server,cs-storage-daemon,cs-storage-plugin
 SYSTEMD_SERVER_HEALTHZ http_status=204
