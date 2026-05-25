@@ -366,8 +366,8 @@ CSS_SYSTEMD_NODE_INSTALL_OK role=all node=hd01 driver=css env_dir=/etc/cs-storag
 SYSTEMD_SERVICES_ACTIVE enabled=3 active=3 services=cs-storage-server,cs-storage-daemon,cs-storage-plugin
 SYSTEMD_SERVER_HEALTHZ http_status=204
 SYSTEMD_OFFICIAL_SOCKETS_OK daemon=/run/cs-storage.sock plugin=/run/docker/plugins/css.sock
-CSS_FORMAL_DRIVER_NODE_OK node=hd01 volume=css-release-formal-hd01 driver=css mountpoint=/mnt/cs_storage/vols/css-release-formal-hd01/mount package=GitHub-Release
-CSS_WEBDAV_REMOTE_GET_OK node=hd01 file=css-release-formal-hd01.txt status=200 content=css-release-formal-hd01 backend=https://rausu.infini-cloud.net/dav/nodes/hd01/
+CSS_FORMAL_DRIVER_NODE_OK node=hd01 volume=css-release-final-hd01 driver=css mountpoint=/mnt/cs_storage/vols/css-release-final-hd01/mount package=GitHub-Release
+CSS_WEBDAV_REMOTE_GET_OK node=hd01 file=css-release-final-hd01.txt status=200 content=css-release-final-hd01 backend=https://rausu.infini-cloud.net/dav/nodes/hd01/
 SYSTEMD_CONFIG_PERMS_OK env=0640 root:cs-storage secrets_dir=0750 root:cs-storage
 DISPOSABLE_LAB_ONLY_ACCEPTED: destructive partition/split-brain tests must not be run on the live hd01 cluster; disposable lab coverage remains a separate safety exercise.
 ```
