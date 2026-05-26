@@ -169,6 +169,21 @@ read_env_value() {
   awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); print; found=1; exit} END {exit found ? 0 : 1}' "$file"
 }
 
+tool_version() {
+  tool=$1
+  shift
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    return 1
+  fi
+  for args in "$@"; do
+    # shellcheck disable=SC2086
+    if out=$("$tool" $args 2>&1 | sed -n '1p'); then
+      [ -n "$out" ] && { printf '%s' "$out"; return 0; }
+    fi
+  done
+  command -v "$tool"
+}
+
 run_preflight() {
   out_dir=$1
   mkdir -p "$out_dir"
@@ -182,6 +197,54 @@ run_preflight() {
       printf 'systemd\t%s\tFAIL\tnot_active\n' "$svc" >> "$pf"
     fi
   done
+
+  pkg_version=$(dpkg-query -W -f='${Version}' cs-storage 2>/dev/null || true)
+  if [ -n "$pkg_version" ]; then
+    printf 'package\tcs-storage\tPASS\tversion=%s\n' "$pkg_version" >> "$pf"
+  else
+    printf 'package\tcs-storage\tFAIL\tnot_installed_by_dpkg\n' >> "$pf"
+  fi
+
+  if note=$(tool_version litefs version -version --version); then
+    printf 'runtime-tool\tlitefs\tPASS\t%s\n' "$note" >> "$pf"
+  else
+    printf 'runtime-tool\tlitefs\tFAIL\tmissing_from_host_path\n' >> "$pf"
+  fi
+  if note=$(tool_version kopia --version version); then
+    printf 'runtime-tool\tkopia\tPASS\t%s\n' "$note" >> "$pf"
+  else
+    printf 'runtime-tool\tkopia\tFAIL\tmissing_from_host_path\n' >> "$pf"
+  fi
+  if note=$(tool_version mount.glusterfs --version -V); then
+    printf 'runtime-tool\tmount.glusterfs\tPASS\t%s\n' "$note" >> "$pf"
+  else
+    printf 'runtime-tool\tmount.glusterfs\tFAIL\tmissing_from_host_path\n' >> "$pf"
+  fi
+  if systemctl list-unit-files glusterd.service >/dev/null 2>&1; then
+    if systemctl is-active --quiet glusterd.service; then
+      printf 'systemd\tglusterd.service\tPASS\tactive\n' >> "$pf"
+    else
+      printf 'systemd\tglusterd.service\tBLOCKED\tnot_active_required_for_local_gluster_server\n' >> "$pf"
+    fi
+  else
+    printf 'systemd\tglusterd.service\tBLOCKED\tunit_missing_required_for_local_gluster_server\n' >> "$pf"
+  fi
+
+  gluster_remote=$(read_env_value /etc/cs-storage/daemon.env CS_GLUSTER_REMOTE 2>/dev/null || true)
+  litefs_advertise=$(read_env_value /etc/cs-storage/daemon.env CS_LITEFS_ADVERTISE_URL 2>/dev/null || true)
+  litefs_lease=$(read_env_value /etc/cs-storage/daemon.env CS_LITEFS_LEASE_TYPE 2>/dev/null || true)
+  [ -n "$litefs_lease" ] || litefs_lease=static
+  if [ -n "$gluster_remote" ]; then
+    printf 'daemon-config\tCS_GLUSTER_REMOTE\tPASS\tconfigured\n' >> "$pf"
+  else
+    printf 'daemon-config\tCS_GLUSTER_REMOTE\tBLOCKED\tmissing_for_shared_multi_static_auto\n' >> "$pf"
+  fi
+  if [ -n "$litefs_advertise" ]; then
+    printf 'daemon-config\tCS_LITEFS_ADVERTISE_URL\tPASS\tconfigured\n' >> "$pf"
+  else
+    printf 'daemon-config\tCS_LITEFS_ADVERTISE_URL\tBLOCKED\tmissing_for_shared_multi_sqlite_auto\n' >> "$pf"
+  fi
+  printf 'daemon-config\tCS_LITEFS_LEASE_TYPE\tPASS\t%s\n' "$litefs_lease" >> "$pf"
 
   if [ -S /run/docker/plugins/css.sock ]; then
     printf 'socket\t/run/docker/plugins/css.sock\tPASS\texists\n' >> "$pf"

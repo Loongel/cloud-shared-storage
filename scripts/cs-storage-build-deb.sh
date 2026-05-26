@@ -7,6 +7,9 @@ OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
 BUILD_BINARIES=${BUILD_BINARIES:-auto}
 DEB_COMPRESSION=${DEB_COMPRESSION:-xz}
+INCLUDE_RUNTIME_TOOLS=${INCLUDE_RUNTIME_TOOLS:-1}
+LITEFS_IMAGE=${LITEFS_IMAGE:-flyio/litefs:0.5}
+KOPIA_IMAGE=${KOPIA_IMAGE:-kopia/kopia:0.23}
 PACKAGE=cs-storage
 MAINTAINER=${MAINTAINER:-CS-Storage Maintainers <root@localhost>}
 
@@ -24,9 +27,12 @@ Options:
   --compression FORMAT    dpkg-deb compression, default xz.
   --build-binaries        Always rebuild Go binaries before packaging.
   --no-build-binaries     Require existing binaries in --bin-dir.
+  --runtime-tools         Require and bundle litefs/kopia, default.
+  --no-runtime-tools      Do not bundle litefs/kopia; development packages only.
 
 Environment:
-  VERSION, ARCH, OUT_DIR, BIN_DIR, BUILD_BINARIES, DEB_COMPRESSION, MAINTAINER.
+  VERSION, ARCH, OUT_DIR, BIN_DIR, BUILD_BINARIES, DEB_COMPRESSION,
+  INCLUDE_RUNTIME_TOOLS, LITEFS_IMAGE, KOPIA_IMAGE, MAINTAINER.
 
 The package installs:
   /usr/local/bin/cs-storage-*
@@ -46,6 +52,8 @@ while test "$#" -gt 0; do
     --compression) shift; DEB_COMPRESSION=$1 ;;
     --build-binaries) BUILD_BINARIES=1 ;;
     --no-build-binaries) BUILD_BINARIES=0 ;;
+    --runtime-tools) INCLUDE_RUNTIME_TOOLS=1 ;;
+    --no-runtime-tools) INCLUDE_RUNTIME_TOOLS=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -97,6 +105,44 @@ build_binaries() {
   ' "$BIN_DIR"
 }
 
+copy_runtime_tool_from_image() {
+  tool=$1
+  image=$2
+  shift 2
+  need_cmd docker
+  docker pull "$image" >/dev/null
+  cid=$(docker create "$image")
+  tmp=$(mktemp -d /tmp/cs-storage-runtime-tool.XXXXXX)
+  cleanup_runtime_tool() {
+    docker rm "$cid" >/dev/null 2>&1 || true
+    rm -rf "$tmp"
+  }
+  trap cleanup_runtime_tool EXIT INT TERM
+  for candidate in "$@"; do
+    if docker cp "$cid:$candidate" "$tmp/$tool" >/dev/null 2>&1; then
+      install -m 0755 "$tmp/$tool" "$BIN_DIR/$tool"
+      trap - EXIT INT TERM
+      cleanup_runtime_tool
+      return
+    fi
+  done
+  echo "failed to extract $tool from $image" >&2
+  exit 1
+}
+
+ensure_runtime_tools() {
+  if test "$INCLUDE_RUNTIME_TOOLS" != "1"; then
+    return
+  fi
+  mkdir -p "$BIN_DIR"
+  if test ! -x "$BIN_DIR/litefs"; then
+    copy_runtime_tool_from_image litefs "$LITEFS_IMAGE" /usr/local/bin/litefs /usr/bin/litefs /bin/litefs
+  fi
+  if test ! -x "$BIN_DIR/kopia"; then
+    copy_runtime_tool_from_image kopia "$KOPIA_IMAGE" /usr/local/bin/kopia /usr/bin/kopia /bin/kopia
+  fi
+}
+
 case "$BUILD_BINARIES" in
   1) build_binaries ;;
   0) all_bins_present || { echo "missing cs-storage binaries in $BIN_DIR" >&2; exit 1; } ;;
@@ -107,6 +153,8 @@ case "$BUILD_BINARIES" in
     ;;
   *) echo "invalid BUILD_BINARIES=$BUILD_BINARIES" >&2; exit 1 ;;
 esac
+
+ensure_runtime_tools
 
 need_cmd dpkg-deb
 
@@ -153,8 +201,7 @@ Section: admin
 Priority: optional
 Architecture: $ARCH
 Maintainer: $MAINTAINER
-Depends: ca-certificates
-Recommends: fuse3, rclone, gocryptfs, glusterfs-client, glusterfs-server, sqlite3
+Depends: ca-certificates, fuse3, rclone, gocryptfs, glusterfs-client, glusterfs-server, sqlite3
 Description: CS-Storage host systemd services and Docker volume driver
  CS-Storage provides a systemd-managed S-side gateway, C-side daemon,
  and Docker VolumeDriver thin proxy for network-backed Docker volumes.

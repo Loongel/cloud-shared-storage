@@ -11,6 +11,15 @@ file. The test target is the formal host systemd deployment:
 The Stack is only an application workload harness. It must not run CSS server,
 daemon, or plugin containers.
 
+GlusterFS and LiteFS are part of the installed CSS host runtime for
+`shared+multi` volumes. Scenario tests may verify their behavior through Docker
+workloads, but they must not replace them with test-only containers. The CSS deb
+package/installer and systemd service model must provide the binaries,
+dependencies, configuration, and lifecycle supervision. The current expected
+implementation is `cs-storage-daemon.service` launching and monitoring
+per-volume GlusterFS mounts, LiteFS mounts, and the auto router; independent
+systemd units are acceptable only if that daemon-managed model is insufficient.
+
 ## Parameter Space
 
 Supported driver options:
@@ -198,7 +207,9 @@ Target scenarios: `S-M-ST-*`.
 
 Prerequisites:
 
-- Daemon has valid Gluster configuration.
+- Daemon has valid Gluster configuration from the host CSS installation.
+- `mount.glusterfs` and required Gluster packages are installed by the deb
+  dependency/install path or are otherwise present before the test starts.
 - Periodic rclone sync is configured when backend verification is required.
 
 Node behavior:
@@ -224,7 +235,9 @@ Target scenarios: `S-M-SQ-*`.
 
 Prerequisites:
 
-- Daemon has valid LiteFS/lease configuration.
+- Daemon has valid LiteFS/lease configuration from the host CSS installation.
+- `litefs` is installed by the CSS deb package or otherwise available to
+  `cs-storage-daemon.service` before the test starts.
 - Test container has `sqlite3`.
 - Periodic rclone sync is configured when backend verification is required.
 
@@ -256,8 +269,9 @@ Target scenarios: `S-M-A-*`.
 
 Prerequisites:
 
-- Both Gluster and LiteFS prerequisites are met.
-- Router is available.
+- Both Gluster and LiteFS host-runtime prerequisites are met.
+- `cs-storage-router` is installed by the CSS deb package and supervised by the
+  daemon as part of the per-volume auto pipeline.
 - Periodic rclone sync is configured when backend verification is required.
 
 Node behavior:
