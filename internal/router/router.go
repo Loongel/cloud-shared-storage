@@ -29,7 +29,7 @@ func (r *Router) Route(path string) Engine {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.sqliteDirs[dir] || isSQLiteFile(base) || isSQLiteCompanion(base) {
-		if isSQLiteFile(base) || isSQLiteCompanion(base) {
+		if dir != "/" && (isSQLiteFile(base) || isSQLiteCompanion(base)) {
 			r.sqliteDirs[dir] = true
 		}
 		return EngineLiteFS

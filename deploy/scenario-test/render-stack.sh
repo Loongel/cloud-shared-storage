@@ -82,13 +82,19 @@ EOF
       continue
     fi
     case "$workload" in
-      shared-multi-sqlite|shared-multi-auto) image='${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}' ;;
-      *) image='${CSS_TEST_WORKLOAD_IMAGE:-busybox:1.36}' ;;
+      shared-multi-sqlite|shared-multi-auto)
+        image='${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}'
+        command='["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]'
+        ;;
+      *)
+        image='${CSS_TEST_WORKLOAD_IMAGE:-busybox:1.36}'
+        command='["/bin/sh", "/usr/local/bin/css-scenario-workload"]'
+        ;;
     esac
     cat <<EOF
   $id:
     image: "$image"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    command: $command
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload

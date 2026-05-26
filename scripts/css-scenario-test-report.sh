@@ -171,6 +171,12 @@ backend_cipher_rel() {
   printf 'nodes/%s/volumes/%s/cipher/gocryptfs.conf' "$storage_node" "$docker_volume"
 }
 
+backend_sqlite_rel() {
+  storage_node=$1
+  docker_volume=$2
+  printf 'nodes/%s/volumes/%s/main.db' "$storage_node" "$docker_volume"
+}
+
 curl_backend() {
   rel=$1
   url=$(join_url "$BACKEND_URL" "$rel")
@@ -260,6 +266,40 @@ backend_check() {
       rm -f "$tmp"
       continue
     fi
+    if [ "$workload" = "shared-multi-sqlite" ]; then
+      deadline=$(( $(date +%s) + 60 ))
+      while :; do
+        fetched=0
+        for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+          rel=$(backend_sqlite_rel "$storage_node" "$docker_volume")
+          if curl_backend "$rel" > "$tmp" 2>/dev/null; then
+            fetched=1
+            break
+          fi
+        done
+        [ "$fetched" = "1" ] && break
+        [ "$(date +%s)" -ge "$deadline" ] && break
+        sleep 2
+      done
+      if [ "$fetched" = "1" ]; then
+        if command -v sqlite3 >/dev/null 2>&1; then
+          integrity=$(sqlite3 "$tmp" "PRAGMA integrity_check;" 2>/dev/null || echo error)
+          if [ "$integrity" = ok ]; then
+            detail="${detail}${detail:+,}$node:sqlite_ok"
+          else
+            result=FAIL
+            detail="${detail}${detail:+,}$node:sqlite_integrity_$integrity"
+          fi
+        else
+          detail="${detail}${detail:+,}$node:sqlite_found"
+        fi
+      else
+        result=FAIL
+        detail="${detail}${detail:+,}$node:sqlite_missing"
+      fi
+      rm -f "$tmp"
+      continue
+    fi
     deadline=$(( $(date +%s) + 60 ))
     while :; do
       fetched=0
@@ -317,6 +357,7 @@ backup_check() {
   [ "$backup" = true ] || { printf 'SKIP:backup_false'; return; }
   config=$(read_daemon_value CS_KOPIA_CONFIG_PATH 2>/dev/null || true)
   repo=$(read_daemon_value CS_KOPIA_REPOSITORY 2>/dev/null || true)
+  password=$(read_daemon_value CS_KOPIA_PASSWORD 2>/dev/null || true)
   if [ -z "$config" ] && [ -z "$repo" ]; then
     printf 'BLOCKED:kopia_config_missing'
     return
@@ -325,13 +366,34 @@ backup_check() {
     printf 'BLOCKED:kopia_binary_missing'
     return
   fi
-  args=
-  [ -z "$config" ] || args="--config-file $config"
-  if kopia $args snapshot list 2>/dev/null | grep -q "cs-storage:$volume"; then
-    printf 'PASS:kopia_snapshot_found'
+  docker_volume="${STACK}_${volume}"
+  source="/mnt/cs_storage/vols/$docker_volume/mount"
+  tmp=$(mktemp /tmp/css-kopia-snapshots.XXXXXX)
+  if [ -n "$config" ]; then
+    if [ -n "$password" ]; then
+      KOPIA_PASSWORD=$password kopia --config-file "$config" snapshot list --all --json "$source" > "$tmp" 2>/dev/null || true
+    else
+      kopia --config-file "$config" snapshot list --all --json "$source" > "$tmp" 2>/dev/null || true
+    fi
   else
-    printf 'FAIL:kopia_snapshot_missing'
+    if [ -n "$password" ]; then
+      KOPIA_REPOSITORY=$repo KOPIA_PASSWORD=$password kopia snapshot list --all --json "$source" > "$tmp" 2>/dev/null || true
+    else
+      KOPIA_REPOSITORY=$repo kopia snapshot list --all --json "$source" > "$tmp" 2>/dev/null || true
+    fi
   fi
+  if grep -q "\"description\":\"cs-storage:$docker_volume\"" "$tmp"; then
+    rm -f "$tmp"
+    printf 'PASS:kopia_snapshot_found'
+    return
+  fi
+  if grep -q "\"description\":\"cs-storage:$volume\"" "$tmp"; then
+    rm -f "$tmp"
+    printf 'PASS:kopia_snapshot_found_legacy_name'
+    return
+  fi
+  rm -f "$tmp"
+  printf 'FAIL:kopia_snapshot_missing:%s' "$docker_volume"
 }
 
 wait_for_services() {

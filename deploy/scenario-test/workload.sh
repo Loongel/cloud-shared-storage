@@ -32,7 +32,12 @@ if [ ! -d /data ]; then
   exit 0
 fi
 
-if ! mkdir -p "$WRITER_DIR" "$CHECKSUM_DIR" "$READER_DIR" "$REPORT_DIR"; then
+if [ "$WORKLOAD" = "shared-multi-sqlite" ]; then
+  if ! test -d /data; then
+    echo "CSS_SCENARIO_RESULT run_id=$RUN_ID profile=${CSS_TEST_PROFILE:-unknown} scenario=$SCENARIO node=$NODE_NAME service=$SERVICE_NAME volume=$VOLUME mode=$MODE write=$WRITE engine=$ENGINE crypt=$CRYPT backup=$BACKUP workload=$WORKLOAD role=mount-check writer_node=${WRITER_NODE:-none} node_names=${NODE_NAMES:-none} expected_nodes=${EXPECT_NODES:-0} expected_visible=none actual_visible=none missing=none unexpected=none operations=mount_check own_sha=none sqlite_integrity=na sqlite_rows=na sqlite_missing=na status=FAIL notes=mount_target_missing"
+    exit 0
+  fi
+elif ! mkdir -p "$WRITER_DIR" "$CHECKSUM_DIR" "$READER_DIR" "$REPORT_DIR"; then
   echo "CSS_SCENARIO_RESULT run_id=$RUN_ID profile=${CSS_TEST_PROFILE:-unknown} scenario=$SCENARIO node=$NODE_NAME service=$SERVICE_NAME volume=$VOLUME mode=$MODE write=$WRITE engine=$ENGINE crypt=$CRYPT backup=$BACKUP workload=$WORKLOAD role=mount-check writer_node=${WRITER_NODE:-none} node_names=${NODE_NAMES:-none} expected_nodes=${EXPECT_NODES:-0} expected_visible=none actual_visible=none missing=none unexpected=none operations=mkdir own_sha=none sqlite_integrity=na sqlite_rows=na sqlite_missing=na status=FAIL notes=mount_write_unavailable"
   exit 0
 fi
@@ -153,9 +158,13 @@ case "$WORKLOAD" in
     expected_visible=$WRITER_NODE
     if [ "$NODE_NAME" = "$WRITER_NODE" ]; then should_write=1; else should_write=0; fi
     ;;
-  shared-multi-file|shared-multi-sqlite|shared-multi-auto)
+  shared-multi-file|shared-multi-auto)
     expected_visible=$NODE_NAMES
     should_write=1
+    ;;
+  shared-multi-sqlite)
+    expected_visible=$NODE_NAMES
+    should_write=0
     ;;
   *)
     status=BLOCKED
@@ -175,8 +184,12 @@ if [ "$need_sqlite" = "1" ]; then
     status=BLOCKED
     notes=missing_sqlite3_in_workload_image
   else
-    mkdir -p "$SQLITE_DIR"
-    db="$SQLITE_DIR/main.db"
+    if [ "$WORKLOAD" = "shared-multi-sqlite" ] || [ "$WORKLOAD" = "shared-multi-auto" ]; then
+      db="/data/main.db"
+    else
+      mkdir -p "$SQLITE_DIR"
+      db="$SQLITE_DIR/main.db"
+    fi
     payload="$RUN_ID:$SCENARIO:$NODE_NAME:$MODE:$WRITE:$ENGINE:$CRYPT:$BACKUP"
     if ! sqlite3 "$db" "PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS css_rows(node TEXT PRIMARY KEY, scenario TEXT, payload TEXT); INSERT OR REPLACE INTO css_rows(node, scenario, payload) VALUES ('$NODE_NAME', '$SCENARIO', '$payload');"; then
       status=FAIL
@@ -190,32 +203,41 @@ if [ "$FLUSH_SETTLE_SECONDS" -gt 0 ] 2>/dev/null; then
   sleep "$FLUSH_SETTLE_SECONDS"
 fi
 
-deadline=$(( $(date +%s) + VERIFY_TIMEOUT ))
-actual_visible=
-missing=
-unexpected=
-while :; do
-  actual_visible=$(join_csv_files "$WRITER_DIR")
-  missing=$(missing_from_csv "$expected_visible" "$actual_visible")
-  unexpected=$(unexpected_from_csv "$actual_visible" "$expected_visible")
-  [ -z "$missing" ] && [ -z "$unexpected" ] && break
-  [ "$(date +%s)" -ge "$deadline" ] && break
-  sleep 2
-done
-operations="${operations},poll_markers"
+actual_visible=none
+missing=none
+unexpected=none
+if [ "$WORKLOAD" != "shared-multi-sqlite" ]; then
+  deadline=$(( $(date +%s) + VERIFY_TIMEOUT ))
+  actual_visible=
+  missing=
+  unexpected=
+  while :; do
+    actual_visible=$(join_csv_files "$WRITER_DIR")
+    missing=$(missing_from_csv "$expected_visible" "$actual_visible")
+    unexpected=$(unexpected_from_csv "$actual_visible" "$expected_visible")
+    [ -z "$missing" ] && [ -z "$unexpected" ] && break
+    [ "$(date +%s)" -ge "$deadline" ] && break
+    sleep 2
+  done
+  operations="${operations},poll_markers"
 
-if [ "$status" = "PASS" ]; then
-  if [ -n "$missing" ]; then
-    status=FAIL
-    notes=missing_expected_markers
-  elif [ -n "$unexpected" ]; then
-    status=FAIL
-    notes=unexpected_markers_visible
+  if [ "$status" = "PASS" ]; then
+    if [ -n "$missing" ]; then
+      status=FAIL
+      notes=missing_expected_markers
+    elif [ -n "$unexpected" ]; then
+      status=FAIL
+      notes=unexpected_markers_visible
+    fi
   fi
 fi
 
 if [ "$need_sqlite" = "1" ] && [ "$status" != "BLOCKED" ] && command -v sqlite3 >/dev/null 2>&1; then
-  db="$SQLITE_DIR/main.db"
+  if [ "$WORKLOAD" = "shared-multi-sqlite" ] || [ "$WORKLOAD" = "shared-multi-auto" ]; then
+    db="/data/main.db"
+  else
+    db="$SQLITE_DIR/main.db"
+  fi
   deadline=$(( $(date +%s) + VERIFY_TIMEOUT ))
   while :; do
     sqlite_integrity=$(sqlite3 "$db" "PRAGMA integrity_check;" 2>/dev/null || echo error)
@@ -247,18 +269,20 @@ if [ "$need_sqlite" = "1" ] && [ "$status" != "BLOCKED" ] && command -v sqlite3 
   fi
 fi
 
-reader_file="$READER_DIR/$NODE_NAME.txt"
-{
-  printf 'node=%s\n' "$NODE_NAME"
-  printf 'expected_visible=%s\n' "$expected_visible"
-  printf 'actual_visible=%s\n' "$actual_visible"
-  printf 'missing=%s\n' "${missing:-none}"
-  printf 'unexpected=%s\n' "${unexpected:-none}"
-  printf 'sqlite_integrity=%s\n' "$sqlite_integrity"
-  printf 'sqlite_rows=%s\n' "$sqlite_rows"
-  printf 'status=%s\n' "$status"
-  printf 'notes=%s\n' "$notes"
-} > "$reader_file"
+if [ "$WORKLOAD" != "shared-multi-sqlite" ]; then
+  reader_file="$READER_DIR/$NODE_NAME.txt"
+  {
+    printf 'node=%s\n' "$NODE_NAME"
+    printf 'expected_visible=%s\n' "$expected_visible"
+    printf 'actual_visible=%s\n' "$actual_visible"
+    printf 'missing=%s\n' "${missing:-none}"
+    printf 'unexpected=%s\n' "${unexpected:-none}"
+    printf 'sqlite_integrity=%s\n' "$sqlite_integrity"
+    printf 'sqlite_rows=%s\n' "$sqlite_rows"
+    printf 'status=%s\n' "$status"
+    printf 'notes=%s\n' "$notes"
+  } > "$reader_file"
+fi
 
 own_sha=none
 if [ -f "$CHECKSUM_DIR/$NODE_NAME.sha256" ]; then

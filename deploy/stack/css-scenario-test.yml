@@ -1062,8 +1062,8 @@ services:
       - css_s_s_sq_e_b:/data
 
   s_m_a_p_n:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1106,8 +1106,8 @@ services:
       - css_s_m_a_p_n:/data
 
   s_m_a_e_n:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1238,8 +1238,8 @@ services:
       - css_s_m_st_e_n:/data
 
   s_m_sq_p_n:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1282,8 +1282,8 @@ services:
       - css_s_m_sq_p_n:/data
 
   s_m_sq_e_n:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1326,8 +1326,8 @@ services:
       - css_s_m_sq_e_n:/data
 
   s_m_a_p_b:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1370,8 +1370,8 @@ services:
       - css_s_m_a_p_b:/data
 
   s_m_a_e_b:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1502,8 +1502,8 @@ services:
       - css_s_m_st_e_b:/data
 
   s_m_sq_p_b:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
@@ -1546,8 +1546,8 @@ services:
       - css_s_m_sq_p_b:/data
 
   s_m_sq_e_b:
-    image: "${CSS_TEST_SQLITE_IMAGE:-busybox:1.36}"
-    command: ["/bin/sh", "/usr/local/bin/css-scenario-workload"]
+    image: "${CSS_TEST_SQLITE_IMAGE:-alpine:3.20}"
+    command: ["/bin/sh", "-c", "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite >/dev/null; exec /bin/sh /usr/local/bin/css-scenario-workload"]
     configs:
       - source: css_scenario_workload
         target: /usr/local/bin/css-scenario-workload
