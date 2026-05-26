@@ -128,6 +128,9 @@ func (s *Server) runPeriodicSyncOnce(ctx context.Context, meta volume.Metadata, 
 	if err != nil {
 		return err
 	}
+	if err := s.ensureRcloneVolumeRemote(ctx, configPath, meta, token.Value); err != nil {
+		return err
+	}
 	args, err := RcloneSyncSpec{
 		ConfigPath: configPath,
 		RemoteName: meta.Name,
@@ -164,7 +167,7 @@ func (s *Server) syncTarget(meta volume.Metadata) string {
 	if s.cfg.RcloneSyncTarget != "" {
 		return expandVolumeTemplate(s.cfg.RcloneSyncTarget, meta.Name)
 	}
-	return sanitizeRemoteName(meta.Name) + ":"
+	return sanitizeRemoteName(meta.Name) + ":" + volumeRemotePath(meta.Name)
 }
 
 func expandVolumeTemplate(v string, name string) string {

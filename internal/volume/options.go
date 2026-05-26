@@ -1,6 +1,7 @@
 package volume
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,8 +12,50 @@ type Options struct {
 	Write  string `json:"write"`
 	Engine string `json:"engine"`
 	Crypt  bool   `json:"crypt"`
-	Backup string `json:"backup"`
+	Backup bool   `json:"backup"`
 	Flush  bool   `json:"flush"`
+}
+
+func (o *Options) UnmarshalJSON(data []byte) error {
+	type optionsAlias struct {
+		Mode   string          `json:"mode"`
+		Write  string          `json:"write"`
+		Engine string          `json:"engine"`
+		Crypt  bool            `json:"crypt"`
+		Backup json.RawMessage `json:"backup"`
+		Flush  bool            `json:"flush"`
+	}
+	var raw optionsAlias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	o.Mode = raw.Mode
+	o.Write = raw.Write
+	o.Engine = raw.Engine
+	o.Crypt = raw.Crypt
+	o.Flush = raw.Flush
+	if len(raw.Backup) == 0 || string(raw.Backup) == "null" {
+		o.Backup = false
+		return nil
+	}
+	var backupBool bool
+	if err := json.Unmarshal(raw.Backup, &backupBool); err == nil {
+		o.Backup = backupBool
+		return nil
+	}
+	var backupString string
+	if err := json.Unmarshal(raw.Backup, &backupString); err != nil {
+		return err
+	}
+	switch strings.ToLower(backupString) {
+	case "true":
+		o.Backup = true
+	case "", "false":
+		o.Backup = false
+	default:
+		return fmt.Errorf("invalid stored backup value %q", backupString)
+	}
+	return nil
 }
 
 func ParseOptions(raw map[string]string) (Options, error) {
@@ -25,7 +68,7 @@ func ParseDriverOptions(optsRaw, labelsRaw map[string]string) (Options, error) {
 		Write:  "single",
 		Engine: "auto",
 		Crypt:  true,
-		Backup: "none",
+		Backup: false,
 	}
 	if hasKey(labelsRaw, "flush", "cs.flush") {
 		return opts, errors.New("flush is destructive and may only be set in driver opts")
@@ -51,8 +94,15 @@ func ParseDriverOptions(optsRaw, labelsRaw map[string]string) (Options, error) {
 			return opts, fmt.Errorf("invalid cs.crypt value %q", v)
 		}
 	}
-	if v := pick(raw, "cs.backup", "backup"); v != "" {
-		opts.Backup = strings.ToLower(v)
+	if v := pick(raw, "cs.backup"); v != "" {
+		switch strings.ToLower(v) {
+		case "true":
+			opts.Backup = true
+		case "false":
+			opts.Backup = false
+		default:
+			return opts, fmt.Errorf("invalid cs.backup value %q", v)
+		}
 	}
 	if v := pick(raw, "flush"); v != "" {
 		switch strings.ToLower(v) {
@@ -76,9 +126,6 @@ func (o Options) Validate() error {
 	}
 	if o.Engine != "auto" && o.Engine != "static" && o.Engine != "sqlite" {
 		return errors.New("cs.engine must be auto, static, or sqlite")
-	}
-	if o.Backup != "none" && o.Backup != "auto" {
-		return errors.New("cs.backup must be none or auto")
 	}
 	if o.Mode == "private" && o.Write == "multi" {
 		return errors.New("cs.write=multi requires cs.mode=shared")

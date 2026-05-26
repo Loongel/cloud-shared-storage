@@ -19,7 +19,7 @@ Supported driver options:
 - `cs.write`: `single`, `multi`
 - `cs.engine`: `auto`, `static`, `sqlite`
 - `cs.crypt`: `false`, `true`
-- `cs.backup`: `none`, `auto`
+- `cs.backup`: `true`, `false`
 - `flush`: `false`, `true`
 
 Valid product combinations:
@@ -46,7 +46,7 @@ Effective pipeline semantics:
 - `shared + multi + auto`: router path, SQLite files route to LiteFS and normal
   files route to GlusterFS.
 - `cs.crypt=true`: backend must not expose plaintext path or plaintext content.
-- `cs.backup=auto`: Kopia must snapshot and restore the mounted plaintext view.
+- `cs.backup=true`: Kopia must snapshot and restore the mounted plaintext view.
 
 ## Full Valid Matrix
 
@@ -100,8 +100,8 @@ Abbreviations:
 - `SQ`: `sqlite`
 - `P`: plaintext, `cs.crypt=false`
 - `E`: encrypted, `cs.crypt=true`
-- `N`: `cs.backup=none`
-- `B`: `cs.backup=auto`
+- `N`: `cs.backup=false`
+- `B`: `cs.backup=true`
 
 ## Workload Design
 
@@ -275,9 +275,9 @@ Expected backend state:
 
 - Same as static plus SQLite expectations, adjusted for encryption.
 
-### Backup Auto Workload
+### Backup Enabled Workload
 
-Target scenarios: every row with `cs.backup=auto`.
+Target scenarios: every row with `cs.backup=true`.
 
 Prerequisites:
 
@@ -293,7 +293,7 @@ Expected backup state:
 - Restore latest snapshot to a temporary directory.
 - Restored contents match the mounted plaintext view for the scenario.
 
-If prerequisites are absent and backup scenarios are requested, report
+If prerequisites are absent and backup=true scenarios are requested, report
 `BLOCKED`, not `PASS`.
 
 ## Default, Precedence, Flush, And Negative Tests
@@ -302,7 +302,7 @@ These are host-side control tests, not long-running application workloads.
 
 | ID | Purpose | Operation | Expected |
 | --- | --- | --- | --- |
-| CTRL-DEFAULT | No opts uses defaults | Create volume with driver `css` and no opts | plan is private-rclone, crypt=true, backup=none; plaintext backend marker absent |
+| CTRL-DEFAULT | No opts uses defaults | Create volume with driver `css` and no opts | plan is private-rclone, crypt=true, backup=false; plaintext backend marker absent |
 | CTRL-ALIASES | Non-`cs.` aliases are accepted | Create with `mode=shared`, `write=single`, `crypt=false` | normalized options match `cs.*` equivalents |
 | CTRL-LABEL-RENDER | Compose labels render to driver opts | run `cs-storage-admin render-compose` | supported labels appear in `driver_opts` |
 | CTRL-OPTS-PRECEDENCE | explicit opts override labels | label says shared, driver opts say private | created plan follows opts |
@@ -399,7 +399,7 @@ Overall run passes only if:
 - No required scenario is silently missing.
 - Every selected node reports for every scenario where it is expected.
 - Backend checks match encryption expectations.
-- Backup scenarios pass when requested with backup prerequisites configured.
+- Backup scenarios pass when requested with Kopia prerequisites configured.
 
 `SKIP` is allowed only for scenarios not requested by the selected profile.
 `BLOCKED` means the scenario was requested but prerequisites are missing; a
@@ -411,9 +411,9 @@ blocked scenario must make the overall run non-pass for formal delivery.
   controls.
 - `full`: all 36 valid rows plus defaults, flush, precedence, and negative
   controls.
-- `backup-only`: all `cs.backup=auto` rows.
+- `backup-only`: all `cs.backup=true` rows.
 - `shared-multi-only`: `S-M-*` rows for Gluster/LiteFS/router validation.
 
 Formal delivery should use `full` after every dependency is configured. During
 incremental rollout, `core` can be used to identify missing shared-multi or
-backup prerequisites without pretending they passed.
+Kopia prerequisites without pretending they passed.

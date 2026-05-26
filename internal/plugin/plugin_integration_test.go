@@ -62,7 +62,7 @@ func TestPluginProxiesVolumeLifecycleToDaemon(t *testing.T) {
 func TestPluginCachesCreateOptionsForLaterCallbacks(t *testing.T) {
 	p := New(Config{DaemonUDS: filepath.Join(t.TempDir(), "missing.sock"), DockerSocket: "", Timeout: time.Second})
 	p.volumeMu.Lock()
-	p.volumes["managed"] = dockerVolumeConfig{Options: map[string]string{"cs.mode": "shared", "cs.write": "multi", "cs.engine": "sqlite", "cs.crypt": "false"}}
+	p.volumes["managed"] = dockerVolumeConfig{Options: runtimeVolumeOptions(map[string]string{"cs.mode": "shared", "cs.write": "multi", "cs.engine": "sqlite", "cs.crypt": "false", "flush": "true"})}
 	p.volumeMu.Unlock()
 
 	opts, labels := p.configForRequest(nil, "managed", nil, nil)
@@ -71,6 +71,9 @@ func TestPluginCachesCreateOptionsForLaterCallbacks(t *testing.T) {
 	}
 	if opts["cs.mode"] != "shared" || opts["cs.write"] != "multi" || opts["cs.engine"] != "sqlite" || opts["cs.crypt"] != "false" {
 		t.Fatalf("cached opts not returned: %#v", opts)
+	}
+	if _, ok := opts["flush"]; ok {
+		t.Fatalf("flush must not be cached for later callbacks: %#v", opts)
 	}
 }
 

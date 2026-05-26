@@ -49,6 +49,9 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	if err != nil {
 		return err
 	}
+	if err := s.ensureRcloneVolumeRemote(ctx, configPath, meta, token.Value); err != nil {
+		return err
+	}
 	mountpoint := layout.Mountpoint
 	if meta.Options.Crypt {
 		mountpoint = layout.Remote
@@ -56,6 +59,7 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	spec := RcloneMountSpec{
 		ConfigPath:      configPath,
 		RemoteName:      meta.Name,
+		RemotePath:      volumeRemotePath(meta.Name),
 		Mountpoint:      mountpoint,
 		CacheDir:        layout.Cache,
 		Token:           token.Value,
@@ -91,6 +95,71 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 		return s.ensureGocryptfs(meta)
 	}
 	return nil
+}
+
+func (s *Server) resetRealtimeRemote(ctx context.Context, meta volume.Metadata) error {
+	if !meta.Options.NeedsRealtimeRclone() {
+		return nil
+	}
+	if s.cfg.ServerURL == "" || s.cfg.NodeID == "" || s.cfg.NodeSecret == "" {
+		return fmt.Errorf("realtime rclone flush requires CS_SERVER_URL, CS_NODE_ID, and CS_NODE_SECRET_KEY")
+	}
+	layout := s.layout(meta.Name)
+	token, err := (AuthClient{
+		ServerURL: s.cfg.ServerURL,
+		NodeID:    s.cfg.NodeID,
+		Secret:    s.cfg.NodeSecret,
+	}).Token(ctx)
+	if err != nil {
+		return err
+	}
+	endpoint := s.cfg.RcloneEndpoint
+	if endpoint == "" {
+		endpoint = token.Endpoint
+	}
+	if endpoint == "" {
+		endpoint = s.cfg.ServerURL
+	}
+	configPath, err := WriteRcloneWebDAVConfig(RcloneWebDAVConfig{
+		Name:      meta.Name,
+		Endpoint:  endpoint,
+		ConfigDir: filepath.Join(layout.Root, "config", "rclone"),
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.runRcloneRemoteCommand(ctx, configPath, meta, token.Value, "purge", volumeRemotePath(meta.Name)); err != nil && !isRcloneMissingPathError(err) {
+		return err
+	}
+	return s.ensureRcloneVolumeRemote(ctx, configPath, meta, token.Value)
+}
+
+func (s *Server) ensureRcloneVolumeRemote(ctx context.Context, configPath string, meta volume.Metadata, token string) error {
+	for _, path := range []string{"volumes", volumeRemotePath(meta.Name)} {
+		if err := s.runRcloneRemoteCommand(ctx, configPath, meta, token, "mkdir", path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) runRcloneRemoteCommand(ctx context.Context, configPath string, meta volume.Metadata, token string, op string, path string) error {
+	binary := s.cfg.RcloneBinary
+	if binary == "" {
+		binary = "rclone"
+	}
+	remote := sanitizeRemoteName(meta.Name) + ":"
+	args := []string{"--config", configPath, "--header", "Authorization: Bearer " + token, op, remote + strings.TrimLeft(path, "/")}
+	cmd := exec.CommandContext(ctx, binary, args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("rclone %s %s failed: %w: %s", op, path, err, string(out))
+	}
+	return nil
+}
+
+func isRcloneMissingPathError(err error) bool {
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "not found") || strings.Contains(text, "directory not found") || strings.Contains(text, "object not found")
 }
 
 func (s *Server) ensureGocryptfs(meta volume.Metadata) error {

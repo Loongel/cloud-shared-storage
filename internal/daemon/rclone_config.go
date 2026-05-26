@@ -29,6 +29,10 @@ func WriteRcloneWebDAVConfig(cfg RcloneWebDAVConfig) (string, error) {
 	return path, os.WriteFile(path, []byte(content), 0o600)
 }
 
+func volumeRemotePath(volumeName string) string {
+	return "volumes/" + sanitizeRemoteName(volumeName)
+}
+
 type RcloneSyncSpec struct {
 	ConfigPath string
 	RemoteName string
@@ -63,6 +67,7 @@ type RcloneMountSpec struct {
 	Binary          string
 	ConfigPath      string
 	RemoteName      string
+	RemotePath      string
 	Mountpoint      string
 	CacheDir        string
 	Token           string
@@ -93,8 +98,12 @@ func (s RcloneMountSpec) Args() ([]string, error) {
 			args = append(args, "--rc-user", s.RCUser, "--rc-pass", s.RCPassword)
 		}
 	}
+	remote := sanitizeRemoteName(s.RemoteName) + ":"
+	if s.RemotePath != "" {
+		remote += strings.TrimLeft(s.RemotePath, "/")
+	}
 	args = append(args,
-		"mount", sanitizeRemoteName(s.RemoteName)+":", s.Mountpoint,
+		"mount", remote, s.Mountpoint,
 		"--vfs-cache-mode", cacheMode,
 	)
 	if s.CacheDir != "" {

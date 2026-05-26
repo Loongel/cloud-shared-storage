@@ -11,7 +11,7 @@ import (
 	"cs-storage/internal/volume"
 )
 
-func TestEnsurePeriodicBackupStartsForBackupAuto(t *testing.T) {
+func TestEnsurePeriodicBackupStartsWhenEnabled(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "kopia")
 	marker := filepath.Join(t.TempDir(), "runs")
 	script := "#!/bin/sh\nprintf run >> '" + marker + "'\n"
@@ -19,7 +19,7 @@ func TestEnsurePeriodicBackupStartsForBackupAuto(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Server{cfg: Config{RootDir: t.TempDir(), KopiaBinary: bin, KopiaConfigPath: filepath.Join(t.TempDir(), "repo.config"), KopiaSnapshotInterval: time.Millisecond}, syncs: NewPeriodicSyncManager()}
-	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: "auto"}}
+	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: true}}
 	if err := s.ensurePeriodicBackup(context.Background(), meta); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestRunKopiaSnapshotAppliesPolicyBeforeSnapshot(t *testing.T) {
 		KopiaConfigPath: filepath.Join(dir, "repo.config"),
 		KopiaPolicyArgs: "--keep-latest=24 --keep-daily=7",
 	}}
-	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: "auto"}}
+	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: true}}
 	if err := os.MkdirAll(s.layout(meta.Name).Mountpoint, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestRunKopiaSnapshotAppliesPolicyBeforeSnapshot(t *testing.T) {
 
 func TestEnsurePeriodicBackupNoopsWhenDisabled(t *testing.T) {
 	s := &Server{cfg: Config{RootDir: t.TempDir(), KopiaConfigPath: filepath.Join(t.TempDir(), "repo.config")}, syncs: NewPeriodicSyncManager()}
-	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: "auto"}}
+	meta := volume.Metadata{Name: "vol", Options: volume.Options{Backup: true}}
 	if err := s.ensurePeriodicBackup(context.Background(), meta); err != nil {
 		t.Fatal(err)
 	}

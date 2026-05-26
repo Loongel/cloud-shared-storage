@@ -25,7 +25,7 @@ type Pipeline struct {
 }
 
 func PlanPipeline(opts volume.Options) Pipeline {
-	p := Pipeline{NeedsCrypt: opts.Crypt, NeedsBackup: opts.Backup == "auto"}
+	p := Pipeline{NeedsCrypt: opts.Crypt, NeedsBackup: opts.Backup}
 	if opts.Mode == "private" {
 		p.Kind = PipelinePrivateRclone
 		p.RealtimeRclone = true

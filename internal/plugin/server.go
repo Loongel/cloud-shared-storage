@@ -183,7 +183,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.client.Call(r.Context(), "/v1/create", map[string]any{"name": req.Name, "opts": req.Opts, "labels": req.Labels})
 	if err == nil && resp.Error == "" && req.Name != "" {
 		s.volumeMu.Lock()
-		s.volumes[req.Name] = dockerVolumeConfig{Labels: cloneStringMap(req.Labels), Options: cloneStringMap(req.Opts)}
+		s.volumes[req.Name] = dockerVolumeConfig{Labels: cloneStringMap(req.Labels), Options: runtimeVolumeOptions(req.Opts)}
 		s.volumeMu.Unlock()
 	}
 	writeDocker(w, resp, err)
@@ -321,7 +321,7 @@ func (c *DockerClient) ListVolumeConfig(ctx context.Context) (map[string]dockerV
 	}
 	volumes := make(map[string]dockerVolumeConfig, len(out.Volumes))
 	for _, v := range out.Volumes {
-		volumes[v.Name] = dockerVolumeConfig{Labels: cloneStringMap(v.Labels), Options: cloneStringMap(v.Options)}
+		volumes[v.Name] = dockerVolumeConfig{Labels: cloneStringMap(v.Labels), Options: runtimeVolumeOptions(v.Options)}
 	}
 	return volumes, nil
 }
@@ -352,7 +352,7 @@ func (c *DockerClient) VolumeConfig(ctx context.Context, name string) (dockerVol
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return dockerVolumeConfig{}, err
 	}
-	return dockerVolumeConfig{Labels: cloneStringMap(out.Labels), Options: cloneStringMap(out.Options)}, nil
+	return dockerVolumeConfig{Labels: cloneStringMap(out.Labels), Options: runtimeVolumeOptions(out.Options)}, nil
 }
 
 func (c *Client) Call(ctx context.Context, endpoint string, payload any) (daemonResponse, error) {
@@ -408,6 +408,16 @@ func cloneStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[k] = v
+	}
+	return out
+}
+
+func runtimeVolumeOptions(in map[string]string) map[string]string {
+	out := cloneStringMap(in)
+	delete(out, "flush")
+	delete(out, "cs.flush")
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

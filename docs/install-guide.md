@@ -217,7 +217,7 @@ volumes:
     driver: css
     driver_opts:
       cs.crypt: "true"
-      cs.backup: "auto"
+      cs.backup: "true"
 ```
 
 The `cs.*` option names are unchanged.

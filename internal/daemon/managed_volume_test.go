@@ -77,6 +77,52 @@ func TestCreatePreservesManagedMountRef(t *testing.T) {
 	}
 }
 
+func TestCreatePersistsNonDestructiveOptions(t *testing.T) {
+	s := newTestDaemon(t)
+
+	w := httptest.NewRecorder()
+	s.create(w, httptest.NewRequest(http.MethodPost, "/v1/create", bytes.NewBufferString(`{"name":"app","opts":{"cs.mode":"shared","cs.write":"single","cs.engine":"auto","cs.crypt":"false","cs.backup":"false"}}`)))
+	assertDaemonOK(t, w)
+
+	got, ok := s.store.Get("app")
+	if !ok {
+		t.Fatal("volume missing after create")
+	}
+	if got.Options.Mode != "shared" || got.Options.Write != "single" || got.Options.Engine != "auto" || got.Options.Crypt || got.Options.Backup {
+		t.Fatalf("unexpected stored options: %#v", got.Options)
+	}
+	if got.Options.Flush {
+		t.Fatalf("flush must remain a one-shot command, not persisted: %#v", got.Options)
+	}
+}
+
+func TestRequestMetadataFallsBackToPersistedOptions(t *testing.T) {
+	s := newTestDaemon(t)
+	meta := volume.Metadata{
+		Name:       "app",
+		Mountpoint: s.mountpoint("app"),
+		Options: volume.Options{
+			Mode:   "shared",
+			Write:  "single",
+			Engine: "auto",
+			Crypt:  false,
+			Backup: false,
+			Flush:  true,
+		},
+	}
+
+	runtimeMeta, opts, err := s.requestMetadata(meta, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtimeMeta.Options.Mode != "shared" || runtimeMeta.Options.Write != "single" || runtimeMeta.Options.Engine != "auto" || runtimeMeta.Options.Crypt || opts.Crypt {
+		t.Fatalf("did not use persisted options: meta=%#v opts=%#v", runtimeMeta.Options, opts)
+	}
+	if runtimeMeta.Options.Flush || opts.Flush {
+		t.Fatalf("persisted fallback must not reapply flush: meta=%#v opts=%#v", runtimeMeta.Options, opts)
+	}
+}
+
 func TestRemoveRetainsManagedVolumeWithoutFlush(t *testing.T) {
 	s := newTestDaemon(t)
 	meta := managedTestVolume(s, "app")
@@ -133,7 +179,7 @@ func managedTestVolume(s *Server, name string) volume.Metadata {
 			Write:  "single",
 			Engine: "auto",
 			Crypt:  false,
-			Backup: "none",
+			Backup: false,
 		},
 	}
 	addMountRef(&meta, daemonManagedMountID)

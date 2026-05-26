@@ -7,21 +7,30 @@ func TestParseOptionsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.Mode != "private" || opts.Write != "single" || opts.Engine != "auto" || !opts.Crypt || opts.Backup != "none" {
+	if opts.Mode != "private" || opts.Write != "single" || opts.Engine != "auto" || !opts.Crypt || opts.Backup {
 		t.Fatalf("unexpected defaults: %#v", opts)
 	}
 }
 
 func TestParseDriverOptionsMergesLabelsAndOpts(t *testing.T) {
 	opts, err := ParseDriverOptions(
-		map[string]string{"cs.write": "single", "cs.crypt": "false"},
+		map[string]string{"cs.write": "single", "cs.crypt": "false", "cs.backup": "true"},
 		map[string]string{"cs.mode": "shared", "cs.write": "multi", "cs.engine": "sqlite"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.Mode != "shared" || opts.Write != "single" || opts.Engine != "sqlite" || opts.Crypt {
+	if opts.Mode != "shared" || opts.Write != "single" || opts.Engine != "sqlite" || opts.Crypt || !opts.Backup {
 		t.Fatalf("unexpected merged options: %#v", opts)
+	}
+}
+
+func TestParseDriverOptionsRejectsBadBackup(t *testing.T) {
+	for _, value := range []string{"sometimes", "1", "0", "yes", "no", "on", "off"} {
+		_, err := ParseDriverOptions(map[string]string{"cs.backup": value}, nil)
+		if err == nil {
+			t.Fatalf("expected cs.backup=%q to be rejected", value)
+		}
 	}
 }
 

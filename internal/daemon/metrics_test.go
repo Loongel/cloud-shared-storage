@@ -20,7 +20,7 @@ func TestDaemonMetrics(t *testing.T) {
 	if err := s.store.Upsert(volume.Metadata{
 		Name:       "vol1",
 		Mountpoint: dir + "/vol1/mount",
-		Options:    volume.Options{Mode: "shared", Write: "multi", Engine: "auto", Backup: "auto"},
+		Options:    volume.Options{Mode: "shared", Write: "multi", Engine: "auto", Backup: true},
 		MountIDs:   map[string]bool{"a": true, "b": true},
 	}); err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestDaemonMetrics(t *testing.T) {
 		"cs_daemon_process_restart_successes_total 1",
 		"cs_daemon_process_restart_failures_total 3",
 		"cs_daemon_shared_multi_volumes_total 0",
-		"cs_daemon_backup_auto_volumes_total 0",
+		"cs_daemon_backup_enabled_volumes_total 0",
 	} {
 		if !strings.Contains(metrics, want) {
 			t.Fatalf("metrics missing %q:\n%s", want, metrics)

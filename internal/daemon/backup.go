@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Server) ensurePeriodicBackup(_ context.Context, meta volume.Metadata) error {
-	if meta.Options.Backup != "auto" {
+	if !meta.Options.Backup {
 		return nil
 	}
 	interval := s.cfg.KopiaSnapshotInterval
@@ -21,7 +21,7 @@ func (s *Server) ensurePeriodicBackup(_ context.Context, meta volume.Metadata) e
 		return nil
 	}
 	if s.cfg.KopiaRepository == "" && s.cfg.KopiaConfigPath == "" {
-		return fmt.Errorf("cs.backup=auto requires CS_KOPIA_REPOSITORY or CS_KOPIA_CONFIG_PATH")
+		return fmt.Errorf("cs.backup=true requires CS_KOPIA_REPOSITORY or CS_KOPIA_CONFIG_PATH")
 	}
 	if s.syncs == nil {
 		s.syncs = NewPeriodicSyncManager()
@@ -39,11 +39,11 @@ func (s *Server) stopPeriodicBackup(meta volume.Metadata) {
 }
 
 func (s *Server) snapshotIfEnabled(meta volume.Metadata) error {
-	if meta.Options.Backup != "auto" {
+	if !meta.Options.Backup {
 		return nil
 	}
 	if s.cfg.KopiaRepository == "" && s.cfg.KopiaConfigPath == "" {
-		return fmt.Errorf("cs.backup=auto requires CS_KOPIA_REPOSITORY or CS_KOPIA_CONFIG_PATH")
+		return fmt.Errorf("cs.backup=true requires CS_KOPIA_REPOSITORY or CS_KOPIA_CONFIG_PATH")
 	}
 	layout := s.layout(meta.Name)
 	if err := os.MkdirAll(layout.Logs, 0o700); err != nil {

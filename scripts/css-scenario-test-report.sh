@@ -15,6 +15,7 @@ BACKEND_CURL_CONNECT_TIMEOUT=${CSS_TEST_BACKEND_CURL_CONNECT_TIMEOUT:-5}
 SERVER_ENV=${SERVER_ENV:-/etc/cs-storage/server.env}
 DAEMON_ENV=${DAEMON_ENV:-/etc/cs-storage/daemon.env}
 STACK_FILE=${STACK_FILE:-}
+DAEMON_NODE_ID=
 
 usage() {
   cat <<'EOF'
@@ -83,6 +84,17 @@ read_env_value() {
   awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); print; found=1; exit} END {exit found ? 0 : 1}' "$file"
 }
 
+read_systemd_env_value() {
+  unit=$1
+  key=$2
+  systemctl show "$unit" -p Environment --value 2>/dev/null | tr ' ' '\n' | awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); print; found=1; exit} END {exit found ? 0 : 1}'
+}
+
+read_daemon_value() {
+  key=$1
+  read_env_value "$DAEMON_ENV" "$key" 2>/dev/null || read_systemd_env_value cs-storage-daemon.service "$key"
+}
+
 get_kv() {
   line=$1
   key=$2
@@ -116,6 +128,7 @@ load_backend_config() {
   [ "$CHECK_BACKEND" = "1" ] || return
   [ -f "$SERVER_ENV" ] || return
   BACKEND_URL=$(read_env_value "$SERVER_ENV" CS_BACKEND_URL 2>/dev/null || true)
+  DAEMON_NODE_ID=$(read_daemon_value CS_NODE_ID 2>/dev/null || true)
   auth_file=$(read_env_value "$SERVER_ENV" CS_BACKEND_AUTH_HEADER_FILE 2>/dev/null || true)
   user_file=$(read_env_value "$SERVER_ENV" CS_BACKEND_USER_FILE 2>/dev/null || true)
   pass_file=$(read_env_value "$SERVER_ENV" CS_BACKEND_PASSWORD_FILE 2>/dev/null || true)
@@ -130,6 +143,32 @@ load_backend_config() {
     BACKEND_PASSWORD=$(sudo -n sed -n '1p' "$pass_file")
     backend_ready=1
   fi
+}
+
+backend_node_candidates() {
+  node=$1
+  printf '%s\n' "$node"
+  case "$node" in
+    *.*) ;;
+    *) printf '%s.netbird.cloud\n' "$node" ;;
+  esac
+  if [ -n "$DAEMON_NODE_ID" ]; then
+    printf '%s\n' "$DAEMON_NODE_ID"
+  fi
+}
+
+backend_marker_rel() {
+  storage_node=$1
+  scenario=$2
+  writer_node=$3
+  docker_volume=$4
+  printf 'nodes/%s/volumes/%s/css-scenario-test/%s/%s/writers/%s.txt' "$storage_node" "$docker_volume" "$RUN_ID" "$scenario" "$writer_node"
+}
+
+backend_cipher_rel() {
+  storage_node=$1
+  docker_volume=$2
+  printf 'nodes/%s/volumes/%s/cipher/gocryptfs.conf' "$storage_node" "$docker_volume"
 }
 
 curl_backend() {
@@ -187,6 +226,8 @@ backend_check() {
   engine=$6
   backup=$7
   workload=$8
+  volume=$9
+  docker_volume="${STACK}_${volume}"
   if [ "$backend_ready" != "1" ]; then
     printf 'SKIP:backend_config_unavailable'
     return
@@ -200,10 +241,17 @@ backend_check() {
   detail=
   for node in $(printf '%s\n' "$expected_visible" | tr ',' ' '); do
     [ -n "$node" ] || continue
-    rel="nodes/$node/css-scenario-test/$RUN_ID/$scenario/writers/$node.txt"
     tmp=$(mktemp /tmp/css-backend.XXXXXX)
     if [ "$crypt" = "true" ]; then
-      if curl_backend "$rel" > "$tmp" 2>/dev/null; then
+      plaintext_found=0
+      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+        rel=$(backend_marker_rel "$storage_node" "$scenario" "$node" "$docker_volume")
+        if curl_backend "$rel" > "$tmp" 2>/dev/null; then
+          plaintext_found=1
+          break
+        fi
+      done
+      if [ "$plaintext_found" = "1" ]; then
         result=FAIL
         detail="${detail}${detail:+,}$node:plaintext_visible"
       else
@@ -214,11 +262,16 @@ backend_check() {
     fi
     deadline=$(( $(date +%s) + 60 ))
     while :; do
-      if curl_backend "$rel" > "$tmp" 2>/dev/null; then
-        fetched=1
-        break
-      fi
       fetched=0
+      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+        rel=$(backend_marker_rel "$storage_node" "$scenario" "$node" "$docker_volume")
+        legacy_rel="nodes/$storage_node/css-scenario-test/$RUN_ID/$scenario/writers/$node.txt"
+        if curl_backend "$rel" > "$tmp" 2>/dev/null || curl_backend "$legacy_rel" > "$tmp" 2>/dev/null; then
+          fetched=1
+          break
+        fi
+      done
+      [ "$fetched" = "1" ] && break
       [ "$(date +%s)" -ge "$deadline" ] && break
       sleep 2
     done
@@ -240,10 +293,13 @@ backend_check() {
   if [ "$crypt" = "true" ]; then
     cipher_ok=0
     for node in $(printf '%s\n' "$expected_visible" | tr ',' ' '); do
-      if curl_backend "nodes/$node/cipher/gocryptfs.conf" >/dev/null 2>&1; then
-        cipher_ok=1
-        break
-      fi
+      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+        if curl_backend "$(backend_cipher_rel "$storage_node" "$docker_volume")" >/dev/null 2>&1 || curl_backend "nodes/$storage_node/cipher/gocryptfs.conf" >/dev/null 2>&1; then
+          cipher_ok=1
+          break
+        fi
+      done
+      [ "$cipher_ok" = "1" ] && break
     done
     if [ "$cipher_ok" = "1" ]; then
       detail="${detail}${detail:+,}cipher_present"
@@ -258,9 +314,9 @@ backend_check() {
 backup_check() {
   backup=$1
   volume=$2
-  [ "$backup" = auto ] || { printf 'SKIP:backup_none'; return; }
-  config=$(read_env_value "$DAEMON_ENV" CS_KOPIA_CONFIG_PATH 2>/dev/null || true)
-  repo=$(read_env_value "$DAEMON_ENV" CS_KOPIA_REPOSITORY 2>/dev/null || true)
+  [ "$backup" = true ] || { printf 'SKIP:backup_false'; return; }
+  config=$(read_daemon_value CS_KOPIA_CONFIG_PATH 2>/dev/null || true)
+  repo=$(read_daemon_value CS_KOPIA_REPOSITORY 2>/dev/null || true)
   if [ -z "$config" ] && [ -z "$repo" ]; then
     printf 'BLOCKED:kopia_config_missing'
     return
@@ -319,7 +375,7 @@ run_control_tests() {
 
   for engine in auto static sqlite; do
     for crypt in false true; do
-      for backup in none auto; do
+      for backup in false true; do
         name="css_ctrl_${base}_${engine}_${crypt}_${backup}"
         if docker_cmd volume create -d css -o cs.mode=private -o cs.write=multi -o cs.engine="$engine" -o cs.crypt="$crypt" -o cs.backup="$backup" "$name" >/tmp/css-ctrl.$$ 2>&1; then
           docker_cmd volume rm "$name" >/dev/null 2>&1 || true
@@ -337,12 +393,12 @@ run_control_tests() {
 
   for bad in mode write engine crypt backup; do
     name="css_ctrl_${base}_bad_$bad"
-    opts="-o cs.mode=private -o cs.write=single -o cs.engine=auto -o cs.crypt=false -o cs.backup=none"
+    opts="-o cs.mode=private -o cs.write=single -o cs.engine=auto -o cs.crypt=false -o cs.backup=false"
     case "$bad" in
-      mode) opts="-o cs.mode=bad -o cs.write=single -o cs.engine=auto -o cs.crypt=false -o cs.backup=none" ;;
-      write) opts="-o cs.mode=private -o cs.write=bad -o cs.engine=auto -o cs.crypt=false -o cs.backup=none" ;;
-      engine) opts="-o cs.mode=private -o cs.write=single -o cs.engine=bad -o cs.crypt=false -o cs.backup=none" ;;
-      crypt) opts="-o cs.mode=private -o cs.write=single -o cs.engine=auto -o cs.crypt=bad -o cs.backup=none" ;;
+      mode) opts="-o cs.mode=bad -o cs.write=single -o cs.engine=auto -o cs.crypt=false -o cs.backup=false" ;;
+      write) opts="-o cs.mode=private -o cs.write=bad -o cs.engine=auto -o cs.crypt=false -o cs.backup=false" ;;
+      engine) opts="-o cs.mode=private -o cs.write=single -o cs.engine=bad -o cs.crypt=false -o cs.backup=false" ;;
+      crypt) opts="-o cs.mode=private -o cs.write=single -o cs.engine=auto -o cs.crypt=bad -o cs.backup=false" ;;
       backup) opts="-o cs.mode=private -o cs.write=single -o cs.engine=auto -o cs.crypt=false -o cs.backup=bad" ;;
     esac
     # shellcheck disable=SC2086
@@ -391,6 +447,7 @@ TSV="$OUT_DIR/results.tsv"
 MD="$OUT_DIR/report.md"
 LOGS="$OUT_DIR/service-logs.txt"
 CONTROLS="$OUT_DIR/controls.tsv"
+PREFLIGHT="$OUT_DIR/preflight.tsv"
 STACK_ARCHIVE="$OUT_DIR/stack.rendered.yml"
 : > "$LOGS"
 
@@ -430,7 +487,7 @@ if grep -q 'CSS_SCENARIO_RESULT' "$LOGS"; then
     sqlite_rows=$(get_kv "$line" sqlite_rows || true)
     status=$(get_kv "$line" status || true)
     notes=$(get_kv "$line" notes || true)
-    backend=$(backend_check "$scenario" "$crypt" "$expected_visible" "$mode" "$write" "$engine" "$backup" "$workload")
+    backend=$(backend_check "$scenario" "$crypt" "$expected_visible" "$mode" "$write" "$engine" "$backup" "$workload" "$volume")
     bkp=$(backup_check "$backup" "$volume")
     final=$status
     case "$backend" in FAIL:*) final=FAIL ;; esac
@@ -472,6 +529,12 @@ blocked_count=$(awk -F '\t' 'NR>1 && $23=="BLOCKED"{n++} END{print n+0}' "$TSV")
 row_count=$(awk 'NR>1{n++} END{print n+0}' "$TSV")
 control_fail=$(awk -F '\t' 'NR>1 && $5=="FAIL"{n++} END{print n+0}' "$CONTROLS")
 control_blocked=$(awk -F '\t' 'NR>1 && $5=="BLOCKED"{n++} END{print n+0}' "$CONTROLS")
+preflight_fail=0
+preflight_blocked=0
+if [ -f "$PREFLIGHT" ]; then
+  preflight_fail=$(awk -F '\t' 'NR>1 && $3=="FAIL"{n++} END{print n+0}' "$PREFLIGHT")
+  preflight_blocked=$(awk -F '\t' 'NR>1 && $3=="BLOCKED"{n++} END{print n+0}' "$PREFLIGHT")
+fi
 
 {
   echo "# CSS Scenario Test Report"
@@ -487,6 +550,8 @@ control_blocked=$(awk -F '\t' 'NR>1 && $5=="BLOCKED"{n++} END{print n+0}' "$CONT
   echo "- Blocked: $blocked_count"
   echo "- Control failures: $control_fail"
   echo "- Control blocked: $control_blocked"
+  echo "- Preflight failures: $preflight_fail"
+  echo "- Preflight blocked: $preflight_blocked"
   if [ "$backend_ready" = "1" ]; then
     echo "- Backend direct check: enabled"
   else
@@ -497,14 +562,22 @@ control_blocked=$(awk -F '\t' 'NR>1 && $5=="BLOCKED"{n++} END{print n+0}' "$CONT
   echo
   echo "| Scenario | Node | Options | Workload | Expected | Actual | Backend | Backup | Status | Notes |"
   echo "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
-  awk -F '\t' 'NR>1 {opts="mode="$5",write="$6",engine="$7",crypt="$8",backup="$9; printf "| `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | **%s** | `%s` |\n",$1,$2,opts,$10,$13,$14,$21,$22,$23,$24}' "$TSV"
+  awk -F '\t' 'NR>1 {opts="cs.mode="$5",cs.write="$6",cs.engine="$7",cs.crypt="$8",cs.backup="$9; printf "| `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | `%s` | **%s** | `%s` |\n",$1,$2,opts,$10,$13,$14,$21,$22,$23,$24}' "$TSV"
   echo
   echo "## Control Results"
   echo
   echo "| Control | Operation | Expected | Actual | Status | Notes |"
   echo "| --- | --- | --- | --- | --- | --- |"
   awk -F '\t' 'NR>1 {printf "| `%s` | `%s` | `%s` | `%s` | **%s** | `%s` |\n",$1,$2,$3,$4,$5,$6}' "$CONTROLS"
+  if [ -f "$PREFLIGHT" ]; then
+    echo
+    echo "## Preflight Results"
+    echo
+    echo "| Check | Target | Status | Notes |"
+    echo "| --- | --- | --- | --- |"
+    awk -F '\t' 'NR>1 {printf "| `%s` | `%s` | **%s** | `%s` |\n",$1,$2,$3,$4}' "$PREFLIGHT"
+  fi
 } > "$MD"
 
-echo "CSS_SCENARIO_REPORT_OK run_id=$RUN_ID profile=$PROFILE rows=$row_count pass=$pass_count fail=$fail_count blocked=$blocked_count control_fail=$control_fail control_blocked=$control_blocked tsv=$TSV controls=$CONTROLS md=$MD logs=$LOGS"
-[ "$fail_count" -eq 0 ] && [ "$blocked_count" -eq 0 ] && [ "$control_fail" -eq 0 ] && [ "$control_blocked" -eq 0 ]
+echo "CSS_SCENARIO_REPORT_OK run_id=$RUN_ID profile=$PROFILE rows=$row_count pass=$pass_count fail=$fail_count blocked=$blocked_count control_fail=$control_fail control_blocked=$control_blocked preflight_fail=$preflight_fail preflight_blocked=$preflight_blocked tsv=$TSV controls=$CONTROLS md=$MD logs=$LOGS"
+[ "$fail_count" -eq 0 ] && [ "$blocked_count" -eq 0 ] && [ "$control_fail" -eq 0 ] && [ "$control_blocked" -eq 0 ] && [ "$preflight_fail" -eq 0 ] && [ "$preflight_blocked" -eq 0 ]

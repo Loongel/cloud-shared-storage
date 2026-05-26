@@ -49,14 +49,14 @@ include_row() {
   backup=$6
   case "$PROFILE" in
     full) return 0 ;;
-    core) [ "$backup" = none ] && return 0 || return 1 ;;
+    core) [ "$backup" = false ] && return 0 || return 1 ;;
     smoke)
       case "$id" in
         p_s_a_p_n|p_s_a_e_n|s_s_a_p_n|s_s_a_e_n) return 0 ;;
         *) return 1 ;;
       esac
       ;;
-    backup-only) [ "$backup" = auto ] && return 0 || return 1 ;;
+    backup-only) [ "$backup" = true ] && return 0 || return 1 ;;
     shared-multi-only) [ "$mode" = shared ] && [ "$write" = multi ] && return 0 || return 1 ;;
     *)
       echo "invalid profile: $PROFILE" >&2

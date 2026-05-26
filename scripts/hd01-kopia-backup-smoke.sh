@@ -57,7 +57,7 @@ for _ in $(seq 1 100); do
 done
 curl --unix-socket "$SOCK" -fsS http://unix/healthz >/dev/null
 
-create_resp=$(curl --unix-socket "$SOCK" -fsS -X POST http://unix/v1/create -H 'Content-Type: application/json' -d '{"name":"'"$VOLUME"'","opts":{"cs.crypt":"false","cs.backup":"auto"}}')
+create_resp=$(curl --unix-socket "$SOCK" -fsS -X POST http://unix/v1/create -H 'Content-Type: application/json' -d '{"name":"'"$VOLUME"'","opts":{"cs.crypt":"false","cs.backup":"true"}}')
 printf '%s' "$create_resp" > "$SMOKE/create.json"
 printf '%s' "$create_resp" | grep -q '"mountpoint"'
 MOUNT="$ROOT/$VOLUME/mount"
@@ -74,7 +74,7 @@ if ! grep -q 'Created snapshot' "$ROOT/$VOLUME/logs/kopia.log" 2>/dev/null; then
   exit 1
 fi
 
-remove_resp=$(curl --unix-socket "$SOCK" -fsS -X POST http://unix/v1/remove -H 'Content-Type: application/json' -d '{"name":"'"$VOLUME"'","opts":{"cs.crypt":"false","cs.backup":"auto"}}')
+remove_resp=$(curl --unix-socket "$SOCK" -fsS -X POST http://unix/v1/remove -H 'Content-Type: application/json' -d '{"name":"'"$VOLUME"'","opts":{"cs.crypt":"false","cs.backup":"true"}}')
 printf '%s' "$remove_resp" > "$SMOKE/remove.json"
 if printf '%s' "$remove_resp" | grep -q '"error":"[^"]'; then
   cat "$SMOKE/remove.json"

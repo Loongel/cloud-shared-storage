@@ -14,7 +14,7 @@ committed `deploy/stack/css-scenario-test.yml` is the full rendered matrix.
   host-side negative and control tests.
 - `core`: all 18 non-backup combinations, plus negative and control tests.
 - `smoke`: four fast realtime scenarios: private/shared-single x plaintext/encrypted.
-- `backup-only`: all `cs.backup=auto` scenarios.
+- `backup-only`: all `cs.backup=true` scenarios.
 - `shared-multi-only`: all `shared + multi` engine scenarios.
 
 Requested scenarios with missing prerequisites are reported as `BLOCKED`. A
@@ -77,7 +77,7 @@ Reports are written under `reports/css-scenario-<run-id>/`:
 - Plaintext WebDAV: direct backend GET must match the expected marker checksum.
 - Encrypted WebDAV: plaintext marker paths must be absent and encrypted cipher
   state must exist.
-- Backup auto: Kopia prerequisites and snapshots are checked; missing config is
+- Backup enabled: Kopia prerequisites and snapshots are checked; missing config is
   `BLOCKED`.
 
 See `docs/scenario-test-design.md` for the complete matrix and pass/fail rules.

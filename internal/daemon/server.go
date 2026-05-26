@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"cs-storage/internal/volume"
@@ -71,10 +72,11 @@ type Config struct {
 }
 
 type Server struct {
-	cfg   Config
-	store *volume.Store
-	procs *ProcessManager
-	syncs *PeriodicSyncManager
+	cfg    Config
+	store  *volume.Store
+	procs  *ProcessManager
+	syncs  *PeriodicSyncManager
+	rootMu sync.Mutex
 }
 
 type CreateRequest struct {
@@ -222,9 +224,9 @@ func (s *Server) metricsHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP cs_daemon_shared_multi_volumes_total Configured shared multi-write volumes.\n")
 	fmt.Fprintf(w, "# TYPE cs_daemon_shared_multi_volumes_total gauge\n")
 	fmt.Fprintf(w, "cs_daemon_shared_multi_volumes_total %d\n", 0)
-	fmt.Fprintf(w, "# HELP cs_daemon_backup_auto_volumes_total Volumes configured with cs.backup=auto.\n")
-	fmt.Fprintf(w, "# TYPE cs_daemon_backup_auto_volumes_total gauge\n")
-	fmt.Fprintf(w, "cs_daemon_backup_auto_volumes_total %d\n", 0)
+	fmt.Fprintf(w, "# HELP cs_daemon_backup_enabled_volumes_total Volumes configured with cs.backup=true.\n")
+	fmt.Fprintf(w, "# TYPE cs_daemon_backup_enabled_volumes_total gauge\n")
+	fmt.Fprintf(w, "cs_daemon_backup_enabled_volumes_total %d\n", 0)
 }
 
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +258,9 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		m := volume.Metadata{Name: req.Name, Mountpoint: mountpoint}
+		storedOpts := opts
+		storedOpts.Flush = false
+		m := volume.Metadata{Name: req.Name, Mountpoint: mountpoint, Options: storedOpts}
 		if existing, ok := s.store.Get(req.Name); ok {
 			m.MountIDs = existing.MountIDs
 		}
@@ -268,6 +272,13 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtimeMeta := volume.Metadata{Name: req.Name, Mountpoint: mountpoint, Options: opts}
+	if opts.Flush {
+		if err := s.resetRealtimeRemote(r.Context(), runtimeMeta); err != nil {
+			s.auditError("create", req.Name, "", err.Error())
+			writeError(w, err.Error())
+			return
+		}
+	}
 	if err := s.ensurePeriodicBackup(r.Context(), runtimeMeta); err != nil {
 		s.auditError("create", req.Name, "", err.Error())
 		writeError(w, err.Error())
@@ -472,12 +483,20 @@ func (s *Server) requestMetadata(meta volume.Metadata, optsRaw, labelsRaw map[st
 			optsRaw = managed
 		}
 	}
+	if len(optsRaw) == 0 && len(labelsRaw) == 0 && metadataOptionsSet(meta.Options) {
+		meta.Options.Flush = false
+		return meta, meta.Options, nil
+	}
 	opts, err := volume.ParseDriverOptions(optsRaw, labelsRaw)
 	if err != nil {
 		return meta, opts, err
 	}
 	meta.Options = opts
 	return meta, opts, nil
+}
+
+func metadataOptionsSet(opts volume.Options) bool {
+	return opts.Mode != "" || opts.Write != "" || opts.Engine != "" || opts.Backup
 }
 
 func (s *Server) managedOptionsFor(name string) (map[string]string, bool) {
@@ -494,6 +513,8 @@ func (s *Server) managedOptionsFor(name string) (map[string]string, bool) {
 }
 
 func (s *Server) withRootMutable(fn func() error) error {
+	s.rootMu.Lock()
+	defer s.rootMu.Unlock()
 	if err := s.setRootImmutable(false); err != nil {
 		return err
 	}

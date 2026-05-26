@@ -11,7 +11,7 @@ import (
 type Metadata struct {
 	Name       string          `json:"name"`
 	Mountpoint string          `json:"mountpoint"`
-	Options    Options         `json:"-"`
+	Options    Options         `json:"options,omitempty"`
 	MountIDs   map[string]bool `json:"mount_ids,omitempty"`
 }
 
@@ -80,7 +80,7 @@ func (s *Store) List() []Metadata {
 }
 
 func storedMetadata(m Metadata) Metadata {
-	m.Options = Options{}
+	m.Options.Flush = false
 	return m
 }
 
