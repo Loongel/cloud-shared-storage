@@ -208,6 +208,53 @@ func (s *Server) ensureGocryptfs(meta volume.Metadata) error {
 	return nil
 }
 
+func (s *Server) ensureReverseGocryptfs(meta volume.Metadata) error {
+	if s.cfg.GocryptfsPassword == "" {
+		return fmt.Errorf("cs.crypt=true requires CS_GOCRYPTFS_PASSWORD")
+	}
+	layout := s.layout(meta.Name)
+	if isMountpointFunc(layout.Cipher) {
+		return nil
+	}
+	binary := s.cfg.GocryptfsBinary
+	if binary == "" {
+		binary = "gocryptfs"
+	}
+	passfile := filepath.Join(layout.Root, "config", "gocryptfs.pass")
+	if err := writeSecretFile(passfile, s.cfg.GocryptfsPassword); err != nil {
+		return err
+	}
+	configPath := filepath.Join(layout.Config, "gocryptfs-reverse.conf")
+	if !fileExists(configPath) {
+		cmd := exec.Command(binary, "-q", "-reverse", "-init", "-passfile", passfile, "-config", configPath, layout.Mountpoint)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("gocryptfs reverse init failed: %w", err)
+		}
+	}
+	if err := os.MkdirAll(layout.Cipher, 0o700); err != nil {
+		return err
+	}
+	args := []string{"-q", "-reverse", "-passfile", passfile, "-config", configPath, layout.Mountpoint, layout.Cipher}
+	if s.cfg.GocryptfsExtraArgs != "" {
+		args = append(fields(s.cfg.GocryptfsExtraArgs), args...)
+	}
+	if err := s.procs.Start(ProcessSpec{
+		Key:     "gocryptfs-reverse:" + meta.Name,
+		Binary:  binary,
+		Args:    args,
+		LogPath: filepath.Join(layout.Logs, "gocryptfs-reverse.log"),
+		Restart: true,
+	}); err != nil {
+		return err
+	}
+	if err := waitForManagedMountpoint(s.procs, "gocryptfs-reverse:"+meta.Name, layout.Cipher, 10*time.Second); err != nil {
+		return err
+	}
+	return nil
+}
+
 func fields(v string) []string {
 	if strings.TrimSpace(v) == "" {
 		return nil

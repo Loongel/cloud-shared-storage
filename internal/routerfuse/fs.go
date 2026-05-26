@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"cs-storage/internal/router"
@@ -44,7 +45,7 @@ func (r *Root) node(rel string) *node {
 func (r *Root) backing(rel string) string {
 	clean := filepath.Clean("/" + rel)
 	if r.Router.Route(clean) == router.EngineLiteFS {
-		return filepath.Join(r.LiteFSRoot, clean)
+		return filepath.Join(r.LiteFSRoot, liteFSName(clean))
 	}
 	return filepath.Join(r.GlusterRoot, clean)
 }
@@ -102,7 +103,7 @@ func (r *Root) Create(ctx context.Context, name string, flags uint32, mode uint3
 		return nil, nil, 0, fs.ToErrno(err)
 	}
 	out.Attr.FromStat(&st)
-	return r.NewInode(ctx, &node{root: r, rel: rel}, stableAttr(&st)), fs.NewLoopbackFile(fd), 0, 0
+	return r.NewInode(ctx, &node{root: r, rel: rel}, stableAttr(&st)), newRoutedFile(fd), fuse.FOPEN_DIRECT_IO, 0
 }
 
 func (r *Root) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
@@ -135,6 +136,18 @@ func (r *Root) Link(ctx context.Context, target fs.InodeEmbedder, name string, o
 	}
 	out.Attr.FromStat(st)
 	return r.NewInode(ctx, &node{root: r, rel: rel}, stableAttr(st)), 0
+}
+
+func (r *Root) Unlink(ctx context.Context, name string) syscall.Errno {
+	return r.node("/").Unlink(ctx, name)
+}
+
+func (r *Root) Rmdir(ctx context.Context, name string) syscall.Errno {
+	return r.node("/").Rmdir(ctx, name)
+}
+
+func (r *Root) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
+	return r.node("/").Rename(ctx, name, newParent, newName, flags)
 }
 
 func (r *Root) symlink(target, rel string) (*syscall.Stat_t, syscall.Errno) {
@@ -255,7 +268,7 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	}
 	out.Attr.FromStat(&st)
 	ch := n.NewInode(ctx, &node{root: n.root, rel: rel}, stableAttr(&st))
-	return ch, fs.NewLoopbackFile(fd), 0, 0
+	return ch, newRoutedFile(fd), fuse.FOPEN_DIRECT_IO, 0
 }
 
 func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
@@ -263,7 +276,7 @@ func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, s
 	if err != nil {
 		return nil, 0, fs.ToErrno(err)
 	}
-	return fs.NewLoopbackFile(fd), 0, 0
+	return newRoutedFile(fd), fuse.FOPEN_DIRECT_IO, 0
 }
 
 func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
@@ -304,11 +317,19 @@ func (n *node) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 }
 
 func (n *node) Unlink(ctx context.Context, name string) syscall.Errno {
-	return fs.ToErrno(syscall.Unlink(n.root.backing(n.childRel(name))))
+	if err := syscall.Unlink(n.root.backing(n.childRel(name))); err != nil {
+		return fs.ToErrno(err)
+	}
+	n.removeChildCache(name)
+	return 0
 }
 
 func (n *node) Rmdir(ctx context.Context, name string) syscall.Errno {
-	return fs.ToErrno(syscall.Rmdir(n.root.backing(n.childRel(name))))
+	if err := syscall.Rmdir(n.root.backing(n.childRel(name))); err != nil {
+		return fs.ToErrno(err)
+	}
+	n.removeChildCache(name)
+	return 0
 }
 
 func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
@@ -333,7 +354,20 @@ func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedd
 	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
 		return fs.ToErrno(err)
 	}
-	return fs.ToErrno(syscall.Rename(from, to))
+	if err := syscall.Rename(from, to); err != nil {
+		return fs.ToErrno(err)
+	}
+	n.removeChildCache(name)
+	if parent, ok := newParent.(*node); ok {
+		parent.removeChildCache(newName)
+	}
+	return 0
+}
+
+func (n *node) removeChildCache(name string) {
+	if n.GetChild(name) != nil {
+		n.RmChild(name)
+	}
 }
 
 func setattr(ctx context.Context, p string, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
@@ -424,4 +458,32 @@ func inodeRel(target fs.InodeEmbedder) (string, bool) {
 
 func stableAttr(st *syscall.Stat_t) fs.StableAttr {
 	return fs.StableAttr{Mode: uint32(st.Mode), Ino: st.Ino, Gen: 1}
+}
+
+func liteFSName(rel string) string {
+	db, suffix, ok := sqliteDatabasePath(rel)
+	if !ok {
+		return "."
+	}
+	trimmed := strings.TrimPrefix(filepath.Clean("/"+db), "/")
+	if trimmed == "" {
+		return "."
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(trimmed, "__", "____"), "/", "__") + suffix
+}
+
+func sqliteDatabasePath(rel string) (db string, suffix string, ok bool) {
+	clean := filepath.Clean("/" + rel)
+	base := strings.ToLower(filepath.Base(clean))
+	for _, ext := range []string{".sqlite3", ".sqlite", ".db"} {
+		if strings.HasSuffix(base, ext) {
+			return clean, "", true
+		}
+		for _, companion := range []string{"-journal", "-wal", "-shm"} {
+			if strings.HasSuffix(base, ext+companion) {
+				return strings.TrimSuffix(clean, companion), companion, true
+			}
+		}
+	}
+	return "", "", false
 }

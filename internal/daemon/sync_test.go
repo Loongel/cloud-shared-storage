@@ -65,6 +65,25 @@ func TestSyncSourceAndTargetTemplates(t *testing.T) {
 	}
 }
 
+func TestSyncSourceUsesCipherForEncryptedSharedMulti(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{cfg: Config{RootDir: root}}
+	meta := testSharedMultiMeta("vol-a")
+	meta.Options.Crypt = true
+	if got, want := s.syncSource(meta), filepath.Join(root, "vol-a", "remote", "cipher"); got != want {
+		t.Fatalf("unexpected encrypted sync source %q want %q", got, want)
+	}
+}
+
+func TestSyncSourceTemplateOverridesEncryptedSharedMulti(t *testing.T) {
+	s := &Server{cfg: Config{RootDir: "/root", RcloneSyncSource: "/src/{volume}"}}
+	meta := testSharedMultiMeta("vol-a")
+	meta.Options.Crypt = true
+	if got := s.syncSource(meta); got != "/src/vol-a" {
+		t.Fatalf("unexpected overridden encrypted sync source %q", got)
+	}
+}
+
 func testSharedMultiMeta(name string) volume.Metadata {
 	return volume.Metadata{
 		Name: name,

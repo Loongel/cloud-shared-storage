@@ -94,6 +94,11 @@ func (s *Server) ensurePeriodicSync(_ context.Context, meta volume.Metadata) err
 	if s.cfg.ServerURL == "" || s.cfg.NodeID == "" || s.cfg.NodeSecret == "" {
 		return fmt.Errorf("periodic rclone sync requires CS_SERVER_URL, CS_NODE_ID, and CS_NODE_SECRET_KEY")
 	}
+	if meta.Options.Crypt {
+		if err := s.ensureReverseGocryptfs(meta); err != nil {
+			return err
+		}
+	}
 	if s.syncs == nil {
 		s.syncs = NewPeriodicSyncManager()
 	}
@@ -159,6 +164,9 @@ func (s *Server) runPeriodicSyncOnce(ctx context.Context, meta volume.Metadata, 
 func (s *Server) syncSource(meta volume.Metadata) string {
 	if s.cfg.RcloneSyncSource != "" {
 		return expandVolumeTemplate(s.cfg.RcloneSyncSource, meta.Name)
+	}
+	if meta.Options.Crypt && PlanPipeline(meta.Options).PeriodicSync {
+		return s.layout(meta.Name).Cipher
 	}
 	return s.layout(meta.Name).Mountpoint
 }

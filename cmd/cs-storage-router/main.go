@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"cs-storage/internal/router"
 	"cs-storage/internal/routerfuse"
@@ -33,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server, err := fs.Mount(*mountpoint, root, &fs.Options{MountOptions: fuseMountOptions(*debug)})
+	server, err := fs.Mount(*mountpoint, root, fuseOptions(*debug))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -53,5 +54,15 @@ func classifyPaths() {
 }
 
 func fuseMountOptions(debug bool) fuse.MountOptions {
-	return fuse.MountOptions{Debug: debug, AllowOther: false}
+	return fuse.MountOptions{Debug: debug, AllowOther: false, EnableLocks: true}
+}
+
+func fuseOptions(debug bool) *fs.Options {
+	zero := 0 * time.Second
+	return &fs.Options{
+		MountOptions:    fuseMountOptions(debug),
+		EntryTimeout:    &zero,
+		AttrTimeout:     &zero,
+		NegativeTimeout: &zero,
+	}
 }

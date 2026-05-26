@@ -23,7 +23,7 @@ func TestRootBackingUsesRouterPolicy(t *testing.T) {
 	if got := root.backing("/app/config.yml"); got != filepath.Join(gluster, "/app/config.yml") {
 		t.Fatalf("expected gluster backing, got %s", got)
 	}
-	if got := root.backing("/app/data/main.db"); got != filepath.Join(lite, "/app/data/main.db") {
+	if got := root.backing("/app/data/main.db"); got != filepath.Join(lite, "app__data__main.db") {
 		t.Fatalf("expected litefs backing, got %s", got)
 	}
 	if got := root.Router.Route("/app/data/other.txt"); got != router.EngineLiteFS {
@@ -103,13 +103,14 @@ func TestHardlinkRejectsCrossEngineRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(lite, "db"), 0o700); err != nil {
+	sqlitePath := root.backing("/db/main.db")
+	if err := os.MkdirAll(filepath.Dir(sqlitePath), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(gluster, "docs"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(lite, "db/main.db"), []byte("sqlite"), 0o600); err != nil {
+	if err := os.WriteFile(sqlitePath, []byte("sqlite"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, errno := root.link(root.node("/db/main.db"), "/docs/main.db.link"); errno != syscall.EXDEV {

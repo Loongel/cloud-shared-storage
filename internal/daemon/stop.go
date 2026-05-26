@@ -22,6 +22,12 @@ func (s *Server) stopSharedMulti(meta volume.Metadata) error {
 	if s.syncs != nil {
 		s.syncs.Stop("rclone-sync:" + meta.Name)
 	}
+	if meta.Options.Crypt {
+		_ = s.procs.Stop("gocryptfs-reverse:" + meta.Name)
+		if err := unmountPath(layout.Cipher); err != nil {
+			return err
+		}
+	}
 	switch PlanPipeline(meta.Options).Kind {
 	case PipelineSharedSQLite:
 		_ = s.procs.Stop("litefs:" + meta.Name)
