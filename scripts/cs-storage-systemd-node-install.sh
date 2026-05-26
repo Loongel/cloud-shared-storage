@@ -279,8 +279,8 @@ install_deps() {
 }
 
 ensure_default_gluster_volume() {
-  role_has_server || return
-  command -v gluster >/dev/null 2>&1 || return
+  role_has_server || return 0
+  command -v gluster >/dev/null 2>&1 || return 0
   systemctl enable glusterd.service >/dev/null 2>&1 || true
   systemctl start glusterd.service >/dev/null 2>&1 || true
   install -d -m 0755 "$CS_GLUSTER_BRICK"
@@ -297,8 +297,8 @@ ensure_default_gluster_volume() {
 }
 
 ensure_default_kopia_repository() {
-  role_has_client || return
-  command -v kopia >/dev/null 2>&1 || return
+  role_has_client || return 0
+  command -v kopia >/dev/null 2>&1 || return 0
   install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$CS_KOPIA_REPOSITORY_PATH" "$(dirname -- "$CS_KOPIA_CONFIG_PATH")"
   if test ! -s "$CS_KOPIA_PASSWORD_FILE"; then
     umask 077

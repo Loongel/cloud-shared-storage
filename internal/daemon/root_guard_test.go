@@ -60,6 +60,25 @@ func TestCreateRelocksRootAfterFailure(t *testing.T) {
 	}
 }
 
+func TestUnsupportedChattrDoesNotFailStartup(t *testing.T) {
+	binDir := t.TempDir()
+	fake := filepath.Join(binDir, "chattr")
+	script := "#!/bin/sh\necho 'chattr: Operation not permitted while setting flags on /x' >&2\nexit 1\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	srv, err := New(Config{RootDir: root, StatePath: filepath.Join(root, ".state", "volumes.json"), EnableChattr: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.setRootImmutable(true); err != nil {
+		t.Fatalf("unsupported chattr should be non-fatal: %v", err)
+	}
+}
+
 func installFakeChattr(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()

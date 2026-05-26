@@ -578,7 +578,19 @@ func setImmutable(path string, enabled bool) error {
 	}
 	out, err := exec.Command("chattr", flag, path).CombinedOutput()
 	if err != nil {
+		if isChattrUnsupported(string(out)) {
+			log.Printf("chattr %s unsupported for %s; continuing without immutable root guard: %s", flag, path, strings.TrimSpace(string(out)))
+			return nil
+		}
 		return fmt.Errorf("chattr %s %s failed: %w: %s", flag, path, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func isChattrUnsupported(output string) bool {
+	msg := strings.ToLower(output)
+	return strings.Contains(msg, "operation not permitted") ||
+		strings.Contains(msg, "inappropriate ioctl") ||
+		strings.Contains(msg, "not supported") ||
+		strings.Contains(msg, "operation not supported")
 }
