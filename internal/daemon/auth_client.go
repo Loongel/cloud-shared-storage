@@ -16,6 +16,7 @@ type AuthClient struct {
 	ServerURL string
 	NodeID    string
 	Secret    string
+	Namespace string
 	Client    *http.Client
 }
 
@@ -36,6 +37,9 @@ func (c AuthClient) Token(ctx context.Context) (Token, error) {
 		"node_id":   c.NodeID,
 		"timestamp": ts,
 		"signature": auth.SignNodeAuth(c.Secret, c.NodeID, ts),
+	}
+	if c.Namespace != "" {
+		payload["namespace"] = c.Namespace
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {

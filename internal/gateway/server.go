@@ -115,6 +115,7 @@ func (s *Server) auth(w http.ResponseWriter, r *http.Request) {
 		NodeID    string `json:"node_id"`
 		Timestamp int64  `json:"timestamp"`
 		Signature string `json:"signature"`
+		Namespace string `json:"namespace,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.metrics.authRejected.Add(1)
@@ -126,9 +127,17 @@ func (s *Server) auth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	sandbox := path.Join(s.cfg.SandboxPrefix, req.NodeID)
+	if req.Namespace == "shared" {
+		sandbox = path.Join(s.cfg.SandboxPrefix, "_shared")
+	} else if req.Namespace != "" {
+		s.metrics.authRejected.Add(1)
+		http.Error(w, "invalid namespace", http.StatusBadRequest)
+		return
+	}
 	claims := auth.Claims{
 		NodeID:     req.NodeID,
-		Sandbox:    path.Join(s.cfg.SandboxPrefix, req.NodeID),
+		Sandbox:    sandbox,
 		Expiration: time.Now().Add(s.cfg.TokenTTL).Unix(),
 	}
 	if err := s.ensureBackendSandbox(r.Context(), claims.Sandbox); err != nil {

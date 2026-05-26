@@ -30,3 +30,21 @@ func TestAuthClientParsesEndpoint(t *testing.T) {
 		t.Fatalf("unexpected token: %#v", tok)
 	}
 }
+
+func TestAuthClientSendsNamespace(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		if req["namespace"] != "shared" {
+			t.Fatalf("namespace not sent: %#v", req)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"token": "jwt-token"})
+	}))
+	defer srv.Close()
+
+	if _, err := (AuthClient{ServerURL: srv.URL, NodeID: "node-a", Secret: "secret", Namespace: "shared"}).Token(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

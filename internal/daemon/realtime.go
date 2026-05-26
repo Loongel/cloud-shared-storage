@@ -30,6 +30,7 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 		ServerURL: s.cfg.ServerURL,
 		NodeID:    s.cfg.NodeID,
 		Secret:    s.cfg.NodeSecret,
+		Namespace: authNamespace(meta),
 	}).Token(ctx)
 	if err != nil {
 		return err
@@ -109,6 +110,7 @@ func (s *Server) resetRealtimeRemote(ctx context.Context, meta volume.Metadata) 
 		ServerURL: s.cfg.ServerURL,
 		NodeID:    s.cfg.NodeID,
 		Secret:    s.cfg.NodeSecret,
+		Namespace: authNamespace(meta),
 	}).Token(ctx)
 	if err != nil {
 		return err
@@ -132,6 +134,13 @@ func (s *Server) resetRealtimeRemote(ctx context.Context, meta volume.Metadata) 
 		return err
 	}
 	return s.ensureRcloneVolumeRemote(ctx, configPath, meta, token.Value)
+}
+
+func authNamespace(meta volume.Metadata) string {
+	if meta.Options.Mode == "shared" {
+		return "shared"
+	}
+	return ""
 }
 
 func (s *Server) ensureRcloneVolumeRemote(ctx context.Context, configPath string, meta volume.Metadata, token string) error {

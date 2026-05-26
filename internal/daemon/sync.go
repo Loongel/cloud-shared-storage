@@ -114,6 +114,7 @@ func (s *Server) runPeriodicSyncOnce(ctx context.Context, meta volume.Metadata, 
 		ServerURL: s.cfg.ServerURL,
 		NodeID:    s.cfg.NodeID,
 		Secret:    s.cfg.NodeSecret,
+		Namespace: authNamespace(meta),
 	}).Token(ctx)
 	if err != nil {
 		return err
