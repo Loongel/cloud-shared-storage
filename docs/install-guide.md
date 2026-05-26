@@ -37,11 +37,11 @@ back to the `wt0` IP or host name. Override with `--bind-interface`,
 `--server-addr`, or `--public-url` only when your topology requires it.
 
 At the end of a server/all install, the script prints `CSS_CLIENT_INSTALL_COMMAND`,
-a filled client one-liner using the selected public server URL. The command
+a readable multi-line client command using the selected public server URL. The command
 contains `--node-secret '<value>'`, so the client writes its own
 `/etc/cs-storage/secrets/node_secret` during install and no separate file-copy
 step is needed. The same command is saved on the server as
-`/etc/cs-storage/client-install-command.sh` with mode `0600`.
+`/etc/cs-storage/client-install-command.sh` with mode `0700`.
 
 Client-only fresh install requires the server URL and the exact `node_secret`
 from the server:

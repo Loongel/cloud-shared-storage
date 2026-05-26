@@ -1,11 +1,12 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.1}
+VERSION=${VERSION:-0.1.2}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
 BUILD_BINARIES=${BUILD_BINARIES:-auto}
+DEB_COMPRESSION=${DEB_COMPRESSION:-xz}
 PACKAGE=cs-storage
 MAINTAINER=${MAINTAINER:-CS-Storage Maintainers <root@localhost>}
 
@@ -16,15 +17,16 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.1.
+  --version VERSION       Package version, default 0.1.2.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
+  --compression FORMAT    dpkg-deb compression, default xz.
   --build-binaries        Always rebuild Go binaries before packaging.
   --no-build-binaries     Require existing binaries in --bin-dir.
 
 Environment:
-  VERSION, ARCH, OUT_DIR, BIN_DIR, BUILD_BINARIES, MAINTAINER.
+  VERSION, ARCH, OUT_DIR, BIN_DIR, BUILD_BINARIES, DEB_COMPRESSION, MAINTAINER.
 
 The package installs:
   /usr/local/bin/cs-storage-*
@@ -41,6 +43,7 @@ while test "$#" -gt 0; do
     --arch) shift; ARCH=$1 ;;
     --out-dir) shift; OUT_DIR=$1 ;;
     --bin-dir) shift; BIN_DIR=$1 ;;
+    --compression) shift; DEB_COMPRESSION=$1 ;;
     --build-binaries) BUILD_BINARIES=1 ;;
     --no-build-binaries) BUILD_BINARIES=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -212,5 +215,5 @@ chmod 0755 "$pkg_root/DEBIAN/postrm"
 
 mkdir -p "$OUT_DIR"
 deb="$OUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
-dpkg-deb --root-owner-group --build "$pkg_root" "$deb"
+dpkg-deb --root-owner-group -Z"$DEB_COMPRESSION" --build "$pkg_root" "$deb"
 echo "CS_STORAGE_DEB_BUILT path=$deb"

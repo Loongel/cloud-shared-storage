@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.1}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.2}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 CSS_DEB_URL=${CSS_DEB_URL:-https://github.com/Loongel/cloud-shared-storage/releases/download/v${CSS_RELEASE_VERSION}/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}
@@ -349,9 +349,12 @@ read_secret_line() {
 client_install_command() {
   server_url=$1
   node_secret=$2
-  printf 'curl -fsSL %s/scripts/css-install-client.sh | sudo sh -s -- --server-url ' "$CSS_REPO_RAW"
+  printf 'curl -fsSL %s/scripts/css-install-client.sh \\\n' "$CSS_REPO_RAW"
+  printf '  | sudo sh -s -- \\\n'
+  printf '  --server-url '
   shell_quote "$server_url"
-  printf ' --node-secret '
+  printf ' \\\n'
+  printf '  --node-secret '
   shell_quote "$node_secret"
 }
 
@@ -359,8 +362,12 @@ write_client_install_command_file() {
   command_text=$1
   install -d -m 0700 "$(dirname -- "$CLIENT_COMMAND_FILE")"
   umask 077
-  printf '%s\n' "$command_text" > "$CLIENT_COMMAND_FILE"
-  chmod 0600 "$CLIENT_COMMAND_FILE"
+  {
+    printf '#!/bin/sh\n'
+    printf 'set -eu\n'
+    printf '%s\n' "$command_text"
+  } > "$CLIENT_COMMAND_FILE"
+  chmod 0700 "$CLIENT_COMMAND_FILE"
 }
 
 read_env_value() {
@@ -573,7 +580,8 @@ css_print_secret_summary() {
           command_text=$(client_install_command "$server_url" "$node_secret_value")
           write_client_install_command_file "$command_text"
           summary_warn "This command contains node_secret. Treat it as a secret."
-          echo "saved_file=$CLIENT_COMMAND_FILE"
+          echo "saved_script=$CLIENT_COMMAND_FILE"
+          echo "run_saved_script=sudo sh $CLIENT_COMMAND_FILE"
           echo
           printf '  %s\n' "$command_text"
         else

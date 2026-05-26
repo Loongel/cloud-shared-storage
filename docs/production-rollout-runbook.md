@@ -82,7 +82,7 @@ The server/all wrapper binds the service to NetBird `wt0` by default, writes
 `CSS_CLIENT_INSTALL_COMMAND` for client nodes after installation. The command
 contains `--node-secret '<value>'`, so client nodes do not need a separate
 secret file copy. The same command is saved on the server as
-`/etc/cs-storage/client-install-command.sh` with mode `0600`.
+`/etc/cs-storage/client-install-command.sh` with mode `0700`.
 
 Client only:
 
@@ -109,7 +109,7 @@ The package also includes the lower-level `cs-storage-systemd-node-install` for 
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.1/cs-storage_0.1.1_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.2/cs-storage_0.1.2_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \

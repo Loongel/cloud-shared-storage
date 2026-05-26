@@ -192,14 +192,14 @@ Formal production deployment uses host systemd services, not long-running CS-Sto
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.1
+./scripts/cs-storage-build-deb.sh --version 0.1.2
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.1
-git push origin main v0.1.1
+git tag v0.1.2
+git push origin main v0.1.2
 ```
 
 For normal installs, use the role-specific one-command wrappers.
@@ -214,7 +214,7 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
   --backend-password '<webdav-password>'
 ```
 
-After a server/all install, the script prints a filled `CSS_CLIENT_INSTALL_COMMAND` using the NetBird FQDN from `wt0` when available. It also saves the same command at `/etc/cs-storage/client-install-command.sh` with mode `0600`.
+After a server/all install, the script prints a filled `CSS_CLIENT_INSTALL_COMMAND` using the NetBird FQDN from `wt0` when available. It also saves the same command at `/etc/cs-storage/client-install-command.sh` with mode `0700`.
 
 Client only, for an application node. Required: server URL and the server's same `node_secret`.
 
@@ -248,7 +248,7 @@ The lower-level installer remains available for advanced automation:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.1/cs-storage_0.1.1_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.2/cs-storage_0.1.2_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -283,7 +283,7 @@ The one-command wrappers intentionally avoid surprising secret changes:
 - `gocryptfs_password` protects encrypted volume contents. It is generated only during first client/all install if absent. Changing it after encrypted data exists makes that old encrypted data unreadable.
 - Existing secret files are reused on repeat installs.
 - Passing a different secret value/file for an existing secret is refused by default. To rotate intentionally, pass `--force-secret-update`; the old file is backed up as `*.BAK.<timestamp>` first.
-- Server/all install output prints a client bootstrap command containing `node_secret` by default, and saves it to `/etc/cs-storage/client-install-command.sh` with mode `0600`. Pass `--no-print-client-secret` if you want to suppress this convenience output. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
+- Server/all install output prints a client bootstrap command containing `node_secret` by default, and saves it to `/etc/cs-storage/client-install-command.sh` with mode `0700`. Pass `--no-print-client-secret` if you want to suppress this convenience output. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
 
 See `docs/install-guide.md` for scenario commands, parameter details, repeat
 install behavior, and common failure handling.
@@ -450,7 +450,7 @@ FORMAL_DRIVER_NODE_OK node=ora01 volume=cs-formal-verify-ora01-fixed2 file=forma
 FORMAL_DRIVER_NODE_OK node=ora02 volume=cs-formal-verify-ora02-fixed2 file=formal-global-ora02-fixed2.txt
 FORMAL_DRIVER_NODE_OK node=wawo01 volume=cs-formal-verify-wawo01-fixed2 file=formal-global-wawo01-fixed2.txt
 FORMAL_WEBDAV_REMOTE_GET_OK nodes=4 files=hd01,ora01,ora02,wawo01 status=200 backend=https://rausu.infini-cloud.net/dav/nodes/
-DEB_BUILD_OK path=dist/cs-storage_0.1.1_amd64.deb sha256=ccc07a9ec38a972349cec3d4b4b1a8b9d94ffce19146022e5bb4168a2b49da5e source=GitHub-Actions
+DEB_BUILD_OK path=dist/cs-storage_0.1.2_amd64.deb sha256=ccc07a9ec38a972349cec3d4b4b1a8b9d94ffce19146022e5bb4168a2b49da5e source=GitHub-Actions
 CSS_REPEAT_INSTALL_SECRET_STABLE_OK node_secret_sha256=cb6499904cdca831ab0479ddc929bff78c9cb5756055264d411968de39fe42fa gocryptfs_password_sha256=13a012b2f816ce07909495c1c6236cd82cde411548a1a35fd0a39f918e87cd47
 CSS_SYSTEMD_NODE_INSTALL_OK role=all node=hd01 driver=css env_dir=/etc/cs-storage prefix=/usr/local/bin
 SYSTEMD_SERVICES_ACTIVE enabled=3 active=3 services=cs-storage-server,cs-storage-daemon,cs-storage-plugin
