@@ -56,42 +56,42 @@ omitted and not counted as pass.
 
 | ID | mode | write | engine | crypt | backup | Workload |
 | --- | --- | --- | --- | --- | --- | --- |
-| P-S-A-P-N | private | single | auto | false | none | private-file |
-| P-S-A-E-N | private | single | auto | true | none | private-file |
-| P-S-ST-P-N | private | single | static | false | none | private-file |
-| P-S-ST-E-N | private | single | static | true | none | private-file |
-| P-S-SQ-P-N | private | single | sqlite | false | none | private-file |
-| P-S-SQ-E-N | private | single | sqlite | true | none | private-file |
-| P-S-A-P-B | private | single | auto | false | auto | private-file + backup |
-| P-S-A-E-B | private | single | auto | true | auto | private-file + backup |
-| P-S-ST-P-B | private | single | static | false | auto | private-file + backup |
-| P-S-ST-E-B | private | single | static | true | auto | private-file + backup |
-| P-S-SQ-P-B | private | single | sqlite | false | auto | private-file + backup |
-| P-S-SQ-E-B | private | single | sqlite | true | auto | private-file + backup |
-| S-S-A-P-N | shared | single | auto | false | none | shared-single-file |
-| S-S-A-E-N | shared | single | auto | true | none | shared-single-file |
-| S-S-ST-P-N | shared | single | static | false | none | shared-single-file |
-| S-S-ST-E-N | shared | single | static | true | none | shared-single-file |
-| S-S-SQ-P-N | shared | single | sqlite | false | none | shared-single-file |
-| S-S-SQ-E-N | shared | single | sqlite | true | none | shared-single-file |
-| S-S-A-P-B | shared | single | auto | false | auto | shared-single-file + backup |
-| S-S-A-E-B | shared | single | auto | true | auto | shared-single-file + backup |
-| S-S-ST-P-B | shared | single | static | false | auto | shared-single-file + backup |
-| S-S-ST-E-B | shared | single | static | true | auto | shared-single-file + backup |
-| S-S-SQ-P-B | shared | single | sqlite | false | auto | shared-single-file + backup |
-| S-S-SQ-E-B | shared | single | sqlite | true | auto | shared-single-file + backup |
-| S-M-A-P-N | shared | multi | auto | false | none | shared-multi-auto |
-| S-M-A-E-N | shared | multi | auto | true | none | shared-multi-auto |
-| S-M-ST-P-N | shared | multi | static | false | none | shared-multi-file |
-| S-M-ST-E-N | shared | multi | static | true | none | shared-multi-file |
-| S-M-SQ-P-N | shared | multi | sqlite | false | none | shared-multi-sqlite |
-| S-M-SQ-E-N | shared | multi | sqlite | true | none | shared-multi-sqlite |
-| S-M-A-P-B | shared | multi | auto | false | auto | shared-multi-auto + backup |
-| S-M-A-E-B | shared | multi | auto | true | auto | shared-multi-auto + backup |
-| S-M-ST-P-B | shared | multi | static | false | auto | shared-multi-file + backup |
-| S-M-ST-E-B | shared | multi | static | true | auto | shared-multi-file + backup |
-| S-M-SQ-P-B | shared | multi | sqlite | false | auto | shared-multi-sqlite + backup |
-| S-M-SQ-E-B | shared | multi | sqlite | true | auto | shared-multi-sqlite + backup |
+| P-S-A-P-N | private | single | auto | false | false | private-file |
+| P-S-A-E-N | private | single | auto | true | false | private-file |
+| P-S-ST-P-N | private | single | static | false | false | private-file |
+| P-S-ST-E-N | private | single | static | true | false | private-file |
+| P-S-SQ-P-N | private | single | sqlite | false | false | private-file |
+| P-S-SQ-E-N | private | single | sqlite | true | false | private-file |
+| P-S-A-P-B | private | single | auto | false | true | private-file + backup |
+| P-S-A-E-B | private | single | auto | true | true | private-file + backup |
+| P-S-ST-P-B | private | single | static | false | true | private-file + backup |
+| P-S-ST-E-B | private | single | static | true | true | private-file + backup |
+| P-S-SQ-P-B | private | single | sqlite | false | true | private-file + backup |
+| P-S-SQ-E-B | private | single | sqlite | true | true | private-file + backup |
+| S-S-A-P-N | shared | single | auto | false | false | shared-single-file |
+| S-S-A-E-N | shared | single | auto | true | false | shared-single-file |
+| S-S-ST-P-N | shared | single | static | false | false | shared-single-file |
+| S-S-ST-E-N | shared | single | static | true | false | shared-single-file |
+| S-S-SQ-P-N | shared | single | sqlite | false | false | shared-single-file |
+| S-S-SQ-E-N | shared | single | sqlite | true | false | shared-single-file |
+| S-S-A-P-B | shared | single | auto | false | true | shared-single-file + backup |
+| S-S-A-E-B | shared | single | auto | true | true | shared-single-file + backup |
+| S-S-ST-P-B | shared | single | static | false | true | shared-single-file + backup |
+| S-S-ST-E-B | shared | single | static | true | true | shared-single-file + backup |
+| S-S-SQ-P-B | shared | single | sqlite | false | true | shared-single-file + backup |
+| S-S-SQ-E-B | shared | single | sqlite | true | true | shared-single-file + backup |
+| S-M-A-P-N | shared | multi | auto | false | false | shared-multi-auto |
+| S-M-A-E-N | shared | multi | auto | true | false | shared-multi-auto |
+| S-M-ST-P-N | shared | multi | static | false | false | shared-multi-file |
+| S-M-ST-E-N | shared | multi | static | true | false | shared-multi-file |
+| S-M-SQ-P-N | shared | multi | sqlite | false | false | shared-multi-sqlite |
+| S-M-SQ-E-N | shared | multi | sqlite | true | false | shared-multi-sqlite |
+| S-M-A-P-B | shared | multi | auto | false | true | shared-multi-auto + backup |
+| S-M-A-E-B | shared | multi | auto | true | true | shared-multi-auto + backup |
+| S-M-ST-P-B | shared | multi | static | false | true | shared-multi-file + backup |
+| S-M-ST-E-B | shared | multi | static | true | true | shared-multi-file + backup |
+| S-M-SQ-P-B | shared | multi | sqlite | false | true | shared-multi-sqlite + backup |
+| S-M-SQ-E-B | shared | multi | sqlite | true | true | shared-multi-sqlite + backup |
 
 Abbreviations:
 

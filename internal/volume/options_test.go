@@ -26,7 +26,7 @@ func TestParseDriverOptionsMergesLabelsAndOpts(t *testing.T) {
 }
 
 func TestParseDriverOptionsRejectsBadBackup(t *testing.T) {
-	for _, value := range []string{"sometimes", "1", "0", "yes", "no", "on", "off"} {
+	for _, value := range []string{"sometimes", "auto", "none", "1", "0", "yes", "no", "on", "off"} {
 		_, err := ParseDriverOptions(map[string]string{"cs.backup": value}, nil)
 		if err == nil {
 			t.Fatalf("expected cs.backup=%q to be rejected", value)
