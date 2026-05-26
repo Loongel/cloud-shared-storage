@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.8}
+VERSION=${VERSION:-0.1.9}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -20,7 +20,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.8.
+  --version VERSION       Package version, default 0.1.9.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
@@ -84,18 +84,19 @@ all_bins_present() {
 build_binaries() {
   mkdir -p "$BIN_DIR"
   if command -v go >/dev/null 2>&1; then
-    go test ./...
-    go build -buildvcs=false -o "$BIN_DIR/cs-storage-server" ./cmd/cs-storage-server
-    go build -buildvcs=false -o "$BIN_DIR/cs-storage-daemon" ./cmd/cs-storage-daemon
-    go build -buildvcs=false -o "$BIN_DIR/cs-storage-plugin" ./cmd/cs-storage-plugin
-    go build -buildvcs=false -o "$BIN_DIR/cs-storage-admin" ./cmd/cs-storage-admin
-    go build -buildvcs=false -o "$BIN_DIR/cs-storage-router" ./cmd/cs-storage-router
+    CGO_ENABLED=0 go test ./...
+    CGO_ENABLED=0 go build -buildvcs=false -o "$BIN_DIR/cs-storage-server" ./cmd/cs-storage-server
+    CGO_ENABLED=0 go build -buildvcs=false -o "$BIN_DIR/cs-storage-daemon" ./cmd/cs-storage-daemon
+    CGO_ENABLED=0 go build -buildvcs=false -o "$BIN_DIR/cs-storage-plugin" ./cmd/cs-storage-plugin
+    CGO_ENABLED=0 go build -buildvcs=false -o "$BIN_DIR/cs-storage-admin" ./cmd/cs-storage-admin
+    CGO_ENABLED=0 go build -buildvcs=false -o "$BIN_DIR/cs-storage-router" ./cmd/cs-storage-router
     return
   fi
   need_cmd docker
   docker run --rm --network host -v "$ROOT:/src" -w /src golang:1.22-bookworm sh -c '
     set -eu
     export PATH=/usr/local/go/bin:/go/bin:$PATH
+    export CGO_ENABLED=0
     mkdir -p "$0"
     go test ./...
     go build -buildvcs=false -o "$0/cs-storage-server" ./cmd/cs-storage-server
