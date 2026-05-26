@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.4}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.5}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 CSS_DEB_URL=${CSS_DEB_URL:-https://github.com/Loongel/cloud-shared-storage/releases/download/v${CSS_RELEASE_VERSION}/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}
@@ -361,7 +361,12 @@ client_install_command() {
 
 write_client_install_command_file() {
   command_text=$1
-  install -d -m 0700 "$(dirname -- "$CLIENT_COMMAND_FILE")"
+  command_dir=$(dirname -- "$CLIENT_COMMAND_FILE")
+  install -d -m 0750 "$command_dir"
+  if getent group cs-storage >/dev/null 2>&1; then
+    chown root:cs-storage "$command_dir" 2>/dev/null || true
+    chmod 0750 "$command_dir" 2>/dev/null || true
+  fi
   umask 077
   {
     printf '#!/bin/sh\n'

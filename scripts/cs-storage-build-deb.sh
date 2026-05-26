@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.4}
+VERSION=${VERSION:-0.1.5}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -17,7 +17,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.4.
+  --version VERSION       Package version, default 0.1.5.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
@@ -171,6 +171,8 @@ if ! id -u cs-storage >/dev/null 2>&1; then
 fi
 install -d -m 0750 -o root -g cs-storage /etc/cs-storage
 install -d -m 0750 -o root -g cs-storage /etc/cs-storage/secrets
+chown root:cs-storage /etc/cs-storage /etc/cs-storage/secrets || true
+chmod 0750 /etc/cs-storage /etc/cs-storage/secrets || true
 install -d -m 0755 /var/lib/cs-storage /var/log/cs-storage /run/docker/plugins
 chown cs-storage:cs-storage /var/lib/cs-storage /var/log/cs-storage || true
 if command -v systemctl >/dev/null 2>&1; then
