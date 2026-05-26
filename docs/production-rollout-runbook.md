@@ -57,6 +57,16 @@ The live hd01 production blockers are closed for the requested delivery scope. D
 
 The formal production install path is host systemd, not CS-Storage runtime containers. Use the role-specific wrappers for normal installs; they download the release `.deb`, write only the needed config, and refuse accidental secret replacement.
 
+The installers set apt/deb work to non-interactive mode, including
+`needrestart` after library upgrades. If an older run is already stuck in a
+package configuration screen, interrupt that run and rerun the current
+one-command installer from GitHub.
+
+For rollback, `sudo apt-get remove -y cs-storage` removes package-managed
+binaries and units while keeping node data. `sudo apt-get purge -y cs-storage`
+is the full cleanup path and removes CSS config/secrets, state, logs,
+`/mnt/cs_storage`, sockets, and the `cs-storage` system user/group.
+
 Server only:
 
 ```sh

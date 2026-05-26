@@ -184,6 +184,32 @@ fi
 EOF
 chmod 0755 "$pkg_root/DEBIAN/prerm"
 
+cat > "$pkg_root/DEBIAN/postrm" <<'EOF'
+#!/bin/sh
+set -eu
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl reset-failed cs-storage-plugin.service cs-storage-daemon.service cs-storage-server.service >/dev/null 2>&1 || true
+fi
+if test "${1:-}" = purge; then
+  if command -v chattr >/dev/null 2>&1 && test -d /mnt/cs_storage; then
+    chattr -R -i /mnt/cs_storage >/dev/null 2>&1 || true
+  fi
+  if test -d /mnt/cs_storage && command -v find >/dev/null 2>&1; then
+    find /mnt/cs_storage -depth -type d -name mount -exec umount -l {} \; >/dev/null 2>&1 || true
+  fi
+  rm -rf /etc/cs-storage /var/lib/cs-storage /var/log/cs-storage /mnt/cs_storage
+  rm -f /run/cs-storage.sock /run/docker/plugins/css.sock
+  if command -v userdel >/dev/null 2>&1 && id -u cs-storage >/dev/null 2>&1; then
+    userdel cs-storage >/dev/null 2>&1 || true
+  fi
+  if command -v groupdel >/dev/null 2>&1 && getent group cs-storage >/dev/null 2>&1; then
+    groupdel cs-storage >/dev/null 2>&1 || true
+  fi
+fi
+EOF
+chmod 0755 "$pkg_root/DEBIAN/postrm"
+
 mkdir -p "$OUT_DIR"
 deb="$OUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 dpkg-deb --root-owner-group --build "$pkg_root" "$deb"

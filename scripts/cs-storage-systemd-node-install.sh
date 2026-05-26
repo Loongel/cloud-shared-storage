@@ -175,8 +175,15 @@ install_deps() {
     exit 1
   }
   need_cmd apt-get
+  export DEBIAN_FRONTEND=noninteractive
+  export DEBIAN_PRIORITY=critical
+  export NEEDRESTART_MODE=a
+  export NEEDRESTART_SUSPEND=1
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  apt-get \
+    -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold \
+    install -y --no-install-recommends \
     ca-certificates fuse3 rclone gocryptfs glusterfs-client glusterfs-server sqlite3
 }
 
@@ -203,8 +210,15 @@ install_deb_package() {
     return
   fi
   test -s "$DEB" || { echo "missing deb package: $DEB" >&2; exit 1; }
+  export DEBIAN_FRONTEND=noninteractive
+  export DEBIAN_PRIORITY=critical
+  export NEEDRESTART_MODE=a
+  export NEEDRESTART_SUSPEND=1
   if command -v apt-get >/dev/null 2>&1; then
-    apt-get install -y --reinstall "$DEB"
+    apt-get \
+      -o Dpkg::Options::=--force-confdef \
+      -o Dpkg::Options::=--force-confold \
+      install -y --reinstall "$DEB"
   else
     need_cmd dpkg
     dpkg -i "$DEB"

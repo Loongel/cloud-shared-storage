@@ -325,7 +325,7 @@ read_env_value() {
 }
 
 find_installer() {
-  if test -x /usr/local/sbin/cs-storage-systemd-node-install; then
+  if test "${CSS_INSTALLER_PREFER_INSTALLED:-0}" = "1" && test -x /usr/local/sbin/cs-storage-systemd-node-install; then
     printf '%s\n' /usr/local/sbin/cs-storage-systemd-node-install
     return
   fi

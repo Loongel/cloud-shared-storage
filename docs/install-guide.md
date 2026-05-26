@@ -81,6 +81,8 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 - Host dependencies: installed by default; pass `--no-install-deps` to skip.
 - Services: enabled and started by default.
 - Release package: latest configured script release URL.
+- Apt/deb installation is forced non-interactive, including `needrestart`
+  prompts after library upgrades.
 
 If an existing `/etc/cs-storage/server.env` or `daemon.env` is present, repeat
 installs reuse values from those files instead of choosing new values.
@@ -136,6 +138,23 @@ The old file is copied to `*.BAK.<timestamp>` before replacement. Do not rotate
 `gocryptfs_password` for existing encrypted volumes unless you have a migration
 plan.
 
+## Uninstall
+
+Use `remove` when you only want to remove package-managed binaries and units
+while keeping node data:
+
+```sh
+sudo apt-get remove -y cs-storage
+```
+
+Use `purge` for a full node cleanup. This removes package files, CSS config,
+secrets, state, logs, `/mnt/cs_storage`, sockets, and the `cs-storage` system
+user/group:
+
+```sh
+sudo apt-get purge -y cs-storage
+```
+
 ## Common Failures
 
 `--server-url is required for client`
@@ -158,6 +177,12 @@ intentional rotation.
 `no free CSS server port in 18080-18100`
 
 Pass `--server-port <port>` or `--server-addr <addr:port>`.
+
+Interactive `Daemons using outdated libraries` package screen
+
+This is the operating system `needrestart` prompt. Current installers suppress
+it automatically. If an older install is already stuck on that screen, interrupt
+that run and rerun the one-command installer from GitHub.
 
 ## Compose/Stack Use
 

@@ -264,6 +264,16 @@ sh /tmp/cs-storage-install.sh \
 
 Use `--role server` on a gateway-only node and `--role client` on client-only nodes. Use `--backend-auth-header` or `--backend-auth-header-file` instead of user/password when the backend requires a complete authorization header. Inline values such as `--backend-user`, `--backend-password`, `--backend-auth-header`, `--node-secret`, and `--gocryptfs-password` are copied into root-owned files under `/etc/cs-storage/secrets`; file arguments are the safer form for automation because inline secrets can appear in shell history or process listings. Pass `--bind-interface <iface>`, `--server-addr <addr:port>`, or `--public-url <url>` only when you intentionally do not want the default NetBird `wt0` binding and URL.
 
+The role wrappers force apt/deb work into non-interactive mode, including the
+Debian/Ubuntu `needrestart` service restart prompt. If an older installer run is
+already stuck on a package configuration screen, interrupt it and rerun the
+one-command installer from GitHub.
+
+To uninstall, use `sudo apt-get remove -y cs-storage` to keep node data, or
+`sudo apt-get purge -y cs-storage` for full cleanup of package files, CSS
+config/secrets, state, logs, `/mnt/cs_storage`, sockets, and the `cs-storage`
+system user/group.
+
 ### Secret Safety
 
 The one-command wrappers intentionally avoid surprising secret changes:
