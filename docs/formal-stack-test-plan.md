@@ -161,21 +161,25 @@ Execution rules:
 | --- | --- | --- | --- |
 | private single plaintext | Each node writes its own marker | Node sees only its own marker | Plaintext marker exists under that node's daemon id |
 | private single encrypted | Each node writes its own marker | Node sees only its own marker | Plaintext marker absent; gocryptfs cipher state exists |
-| shared single plaintext | Deterministic writer writes one marker | Every selected node sees writer marker | Plaintext writer marker exists under writer daemon id |
+| shared single plaintext | Deterministic writer writes one marker | Every selected node sees writer marker | Plaintext writer marker exists under shared volume namespace |
 | shared single encrypted | Deterministic writer writes one marker | Every selected node sees writer marker | Plaintext marker absent; cipher state exists |
 | shared multi static | Every node writes a marker | Every node sees all node markers | Plaintext or encrypted backend follows `cs.crypt` |
 | shared multi sqlite | Every node inserts one SQLite row | `PRAGMA integrity_check=ok`, row count equals node count | Backend DB or encrypted state follows `cs.crypt` |
 | shared multi auto | File marker plus SQLite probe | File and SQLite expectations both pass | Backend follows selected plaintext/encrypted mode |
 | backup enabled | Normal workload plus snapshot | Workload passes locally | Kopia snapshot found and restore matches mounted plaintext view |
 
-Backend paths are volume-scoped inside the node sandbox:
+Backend paths are volume-scoped inside the S-side sandbox. Private volumes use
+the authenticated node id; shared volumes use the shared namespace `_shared` so
+all clients address the same remote tree while still staying inside an
+S-controlled sandbox:
 
 - Plaintext marker: `nodes/<node-id>/volumes/<docker-volume>/css-scenario-test/<run-id>/<scenario>/writers/<node>.txt`
 - Encrypted state: `nodes/<node-id>/volumes/<docker-volume>/cipher/gocryptfs.conf`
 
-This preserves the S-side node sandbox model from the technical design while
-preventing independent Docker volumes on the same node from sharing one
-gocryptfs cipher root.
+For shared volumes, replace `<node-id>` with `_shared`. This preserves the
+S-side sandbox model from the technical design while allowing shared volumes to
+be genuinely cross-node visible and preventing independent Docker volumes from
+sharing one gocryptfs cipher root.
 
 ## Failure Classification
 

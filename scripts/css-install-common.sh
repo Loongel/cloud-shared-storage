@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.13}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.14}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 CSS_DEB_URL=${CSS_DEB_URL:-https://github.com/Loongel/cloud-shared-storage/releases/download/v${CSS_RELEASE_VERSION}/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}
@@ -53,6 +53,8 @@ Common options:
   --bind-interface IFACE         Default server bind interface, default wt0.
   --node-secret VALUE            Shared S/C node secret; client must match server.
   --node-secret-file FILE        File containing shared S/C node secret.
+  --gocryptfs-password VALUE     Cluster gocryptfs passphrase; generated if absent.
+  --gocryptfs-password-file FILE
   --force-secret-update          Allow replacing existing secret files after backup.
   --no-print-client-secret       Do not print/store inline client install secret.
   --install-deps                 Install host dependencies, default.
@@ -83,8 +85,6 @@ EOF
       cat <<'EOF'
 Client options, required for client-only:
   --server-url URL               S-side URL, for example http://10.0.0.10:18080.
-  --gocryptfs-password VALUE     gocryptfs passphrase; generated if absent.
-  --gocryptfs-password-file FILE
 
 EOF
       ;;
@@ -350,6 +350,7 @@ read_secret_line() {
 client_install_command() {
   server_url=$1
   node_secret=$2
+  gocryptfs_password=$3
   printf 'curl -fsSL %s/scripts/css-install-client.sh \\\n' "$CSS_REPO_RAW"
   printf '  | sudo sh -s -- \\\n'
   printf '  --server-url '
@@ -357,6 +358,9 @@ client_install_command() {
   printf ' \\\n'
   printf '  --node-secret '
   shell_quote "$node_secret"
+  printf ' \\\n'
+  printf '  --gocryptfs-password '
+  shell_quote "$gocryptfs_password"
 }
 
 write_client_install_command_file() {
@@ -456,6 +460,12 @@ css_install() {
   esac
   node_secret_file=$(secret_path_from_value_or_file node_secret "$NODE_SECRET" "$NODE_SECRET_FILE" "$SECRET_DIR/node_secret" "$node_secret_generate" || true)
   test -n "$node_secret_file" || die "--node-secret or --node-secret-file is required for a fresh client install; use the client command printed by the server installer"
+  gocrypt_file=
+  case "$role" in
+    server|all)
+      gocrypt_file=$(secret_path_from_value_or_file gocryptfs_password "$GOCRYPTFS_PASSWORD" "$GOCRYPTFS_PASSWORD_FILE" "$SECRET_DIR/gocryptfs_password" yes)
+      ;;
+  esac
   installer=$(find_installer)
 
   set -- --role "$role" --driver-name "$DRIVER_NAME" --deb-url "$CSS_DEB_URL" --node-id "$NODE_ID" --node-secret-file "$node_secret_file" --bind-interface "$CSS_BIND_INTERFACE"
@@ -546,7 +556,9 @@ css_install() {
         SERVER_URL=$(read_env_value "$ENV_DIR/daemon.env" CS_SERVER_URL || true)
       fi
       test -n "$SERVER_URL" || die "--server-url is required for client"
-      gocrypt_file=$(secret_path_from_value_or_file gocryptfs_password "$GOCRYPTFS_PASSWORD" "$GOCRYPTFS_PASSWORD_FILE" "$SECRET_DIR/gocryptfs_password" yes)
+      if test -z "$gocrypt_file"; then
+        gocrypt_file=$(secret_path_from_value_or_file gocryptfs_password "$GOCRYPTFS_PASSWORD" "$GOCRYPTFS_PASSWORD_FILE" "$SECRET_DIR/gocryptfs_password" yes)
+      fi
       set -- "$@" --server-url "$SERVER_URL" --gocryptfs-password-file "$gocrypt_file"
       ;;
   esac
@@ -596,20 +608,23 @@ css_print_secret_summary() {
         summary_title "CSS CLIENT INSTALL COMMAND - SECRET"
         if test "$PRINT_CLIENT_SECRET" = "1"; then
           node_secret_value=$(read_secret_line "$node_secret_file")
-          command_text=$(client_install_command "$server_url" "$node_secret_value")
+          gocrypt_value=$(read_secret_line "$gocrypt_file")
+          command_text=$(client_install_command "$server_url" "$node_secret_value" "$gocrypt_value")
           write_client_install_command_file "$command_text"
-          summary_warn "This command contains node_secret. Treat it as a secret."
+          summary_warn "This command contains node_secret and gocryptfs_password. Treat it as a secret."
           echo "saved_script=$CLIENT_COMMAND_FILE"
           echo "run_saved_script=sudo sh $CLIENT_COMMAND_FILE"
           echo
           printf '  %s\n' "$command_text"
         else
           echo "  Inline secret output is disabled."
-          echo "  Copy $node_secret_file to each client or rerun without --no-print-client-secret."
+          echo "  Copy $node_secret_file and $gocrypt_file to each client or rerun without --no-print-client-secret."
           printf '  curl -fsSL %s/scripts/css-install-client.sh | sudo sh -s -- --server-url ' "$CSS_REPO_RAW"
           shell_quote "$server_url"
           printf ' --node-secret-file '
           shell_quote "$node_secret_file"
+          printf ' --gocryptfs-password-file '
+          shell_quote "$gocrypt_file"
           printf '\n'
         fi
         summary_rule

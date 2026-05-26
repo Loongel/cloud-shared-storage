@@ -192,19 +192,19 @@ Formal production deployment uses host systemd services, not long-running CS-Sto
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.13
+./scripts/cs-storage-build-deb.sh --version 0.1.14
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.13
-git push origin main v0.1.13
+git tag v0.1.14
+git push origin main v0.1.14
 ```
 
 For normal installs, use the role-specific one-command wrappers.
 
-Server only, for a dedicated gateway node. Required: backend URL and backend auth only. This starts `cs-storage-server.service` only; it does not install the local Docker volume driver services. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret` and prints a ready-to-run client install command containing that same secret.
+Server only, for a dedicated gateway node. Required: backend URL and backend auth only. This starts `cs-storage-server.service` only; it does not install the local Docker volume driver services. If you do not pass `--node-secret` or `--gocryptfs-password`, the script generates `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password`, then prints a ready-to-run client install command containing those same secrets.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
@@ -216,21 +216,24 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 
 After a server/all install, the script prints a filled `CSS_CLIENT_INSTALL_COMMAND` using the NetBird FQDN from `wt0` when available. It also saves the same command at `/etc/cs-storage/client-install-command.sh` with mode `0700`.
 
-Client only, for an application node. Required: server URL and the server's same `node_secret`.
+Client only, for an application node. Required: server URL and the server's same `node_secret`. For encrypted shared volumes, use the server's same `gocryptfs_password`; the server-printed command includes it.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh \
   | sudo sh -s -- \
   --server-url http://<server-netbird-fqdn-or-wt0-ip>:<server-port> \
-  --node-secret '<node-secret-from-server-output>'
+  --node-secret '<node-secret-from-server-output>' \
+  --gocryptfs-password '<gocryptfs-password-from-server-output>'
 ```
 
 `node_secret` is not the node id. The node id defaults to the NetBird FQDN from
 `netbird status`, then falls back to the host name, and can be overridden with
 `--node-id`. `node_secret` is the shared cluster authentication secret generated
-by the server/all installer. The server-printed client command embeds this value
+by the server/all installer. `gocryptfs_password` is the cluster encryption
+secret for encrypted volumes that must be shared across nodes reading the same
+shared encrypted volume. The server-printed client command embeds both values
 so a client node does not need a separate file-copy step. Treat that command as
-a secret because it grants access to the CSS server.
+a secret because it grants access to the CSS server and encrypted volume data.
 
 Server plus client on the same node. Required: backend URL and backend auth only. This starts all three services: `cs-storage-server.service`, `cs-storage-daemon.service`, and `cs-storage-plugin.service`. The local client uses the local server URL automatically.
 
@@ -248,7 +251,7 @@ The lower-level installer remains available for advanced automation:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.13/cs-storage_0.1.13_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.14/cs-storage_0.1.14_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -280,10 +283,10 @@ system user/group.
 The one-command wrappers intentionally avoid surprising secret changes:
 
 - `node_secret` authenticates clients to the server. It is generated only during first server/all install if absent. Client-only installs never generate it; they require the exact same file/value from the server.
-- `gocryptfs_password` protects encrypted volume contents. It is generated only during first client/all install if absent. Changing it after encrypted data exists makes that old encrypted data unreadable.
+- `gocryptfs_password` protects encrypted volume contents. It is generated only during first server/all/client install if absent. It must be identical on clients that need to read the same encrypted shared volume. Changing it after encrypted data exists makes that old encrypted data unreadable.
 - Existing secret files are reused on repeat installs.
 - Passing a different secret value/file for an existing secret is refused by default. To rotate intentionally, pass `--force-secret-update`; the old file is backed up as `*.BAK.<timestamp>` first.
-- Server/all install output prints a client bootstrap command containing `node_secret` by default, and saves it to `/etc/cs-storage/client-install-command.sh` with mode `0700`. Pass `--no-print-client-secret` if you want to suppress this convenience output. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
+- Server/all install output prints a client bootstrap command containing `node_secret` and `gocryptfs_password` by default, and saves it to `/etc/cs-storage/client-install-command.sh` with mode `0700`. Pass `--no-print-client-secret` if you want to suppress this convenience output. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
 
 See `docs/install-guide.md` for scenario commands, parameter details, repeat
 install behavior, and common failure handling.

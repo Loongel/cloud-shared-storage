@@ -7,7 +7,8 @@ HELPER_IMAGE=${HELPER_IMAGE:-alpine:3.20}
 RUN_ID=${CSS_ROLLOUT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}
 SERVER_URL=${SERVER_URL:-}
 NODE_SECRET_FILE=${NODE_SECRET_FILE:-/etc/cs-storage/secrets/node_secret}
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.13}
+GOCRYPTFS_PASSWORD_FILE=${GOCRYPTFS_PASSWORD_FILE:-/etc/cs-storage/secrets/gocryptfs_password}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.14}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 NODES_MIN=${NODES_MIN:-}
 WORK=${WORK:-/tmp/css-swarm-client-rollout-$RUN_ID}
@@ -25,6 +26,8 @@ only a temporary privileged rollout launcher.
 Options:
   --server-url URL          CSS server URL. Defaults to local daemon.env.
   --node-secret-file FILE   Server node_secret file, default $NODE_SECRET_FILE.
+  --gocryptfs-password-file FILE
+                            Cluster gocryptfs password file, default $GOCRYPTFS_PASSWORD_FILE.
   --release-version VER     GitHub Release version, default $CSS_RELEASE_VERSION.
   --stack NAME              Temporary stack name, default $STACK.
   --nodes-min N             Required completed node count, default Ready nodes.
@@ -42,6 +45,7 @@ while test "$#" -gt 0; do
   case "$1" in
     --server-url) shift; SERVER_URL=$1 ;;
     --node-secret-file) shift; NODE_SECRET_FILE=$1 ;;
+    --gocryptfs-password-file) shift; GOCRYPTFS_PASSWORD_FILE=$1 ;;
     --release-version) shift; CSS_RELEASE_VERSION=$1 ;;
     --stack) shift; STACK=$1 ;;
     --nodes-min) shift; NODES_MIN=$1 ;;
@@ -76,7 +80,7 @@ cleanup() {
       fi
       sleep 1
     done
-    docker_cmd secret rm "$SECRET_NAME" >/dev/null 2>&1 || true
+    docker_cmd secret rm "$NODE_SECRET_NAME" "$GOCRYPTFS_SECRET_NAME" >/dev/null 2>&1 || true
   fi
 }
 
@@ -96,6 +100,10 @@ test -s "$NODE_SECRET_FILE" || {
   echo "missing node secret file: $NODE_SECRET_FILE" >&2
   exit 1
 }
+test -s "$GOCRYPTFS_PASSWORD_FILE" || {
+  echo "missing gocryptfs password file: $GOCRYPTFS_PASSWORD_FILE" >&2
+  exit 1
+}
 
 state=$(docker_cmd info --format '{{.Swarm.LocalNodeState}}')
 test "$state" = active || {
@@ -111,12 +119,14 @@ test "$ready_nodes" -ge "$NODES_MIN" || {
   exit 1
 }
 
-SECRET_NAME="${STACK}-${RUN_ID}-node-secret"
+NODE_SECRET_NAME="${STACK}-${RUN_ID}-node-secret"
+GOCRYPTFS_SECRET_NAME="${STACK}-${RUN_ID}-gocryptfs-password"
 rm -rf "$WORK"
 mkdir -p "$WORK"
 docker_cmd stack rm "$STACK" >/dev/null 2>&1 || true
-docker_cmd secret rm "$SECRET_NAME" >/dev/null 2>&1 || true
-docker_cmd secret create "$SECRET_NAME" "$NODE_SECRET_FILE" >/dev/null
+docker_cmd secret rm "$NODE_SECRET_NAME" "$GOCRYPTFS_SECRET_NAME" >/dev/null 2>&1 || true
+docker_cmd secret create "$NODE_SECRET_NAME" "$NODE_SECRET_FILE" >/dev/null
+docker_cmd secret create "$GOCRYPTFS_SECRET_NAME" "$GOCRYPTFS_PASSWORD_FILE" >/dev/null
 
 trap cleanup EXIT INT TERM
 
@@ -135,17 +145,21 @@ services:
         mkdir -p /host/var/log/cs-storage /host/tmp
         secret_host=/host/tmp/css-rollout-node-secret-$RUN_ID
         secret_chroot=/tmp/css-rollout-node-secret-$RUN_ID
+        gocryptfs_host=/host/tmp/css-rollout-gocryptfs-password-$RUN_ID
+        gocryptfs_chroot=/tmp/css-rollout-gocryptfs-password-$RUN_ID
         script_host=/host/tmp/css-rollout-install-client-$RUN_ID.sh
         script_chroot=/tmp/css-rollout-install-client-$RUN_ID.sh
         log=/host/var/log/cs-storage/css-client-rollout-$RUN_ID.log
         cp /run/secrets/node_secret "\$\$secret_host"
+        cp /run/secrets/gocryptfs_password "\$\$gocryptfs_host"
         chmod 0600 "\$\$secret_host"
+        chmod 0600 "\$\$gocryptfs_host"
         {
           printf '%s\n' '#!/bin/sh'
           printf '%s\n' 'set -eu'
           printf '%s\n' 'export CSS_RELEASE_VERSION="$CSS_RELEASE_VERSION"'
           printf '%s\n' 'export CSS_OUTPUT_COLOR=never'
-          printf '%s\n' "curl -fsSL \"$CSS_REPO_RAW/scripts/css-install-client.sh\" | sh -s -- --server-url \"$SERVER_URL\" --node-secret-file \"\$\$secret_chroot\" --force-secret-update"
+          printf '%s\n' "curl -fsSL \"$CSS_REPO_RAW/scripts/css-install-client.sh\" | sh -s -- --server-url \"$SERVER_URL\" --node-secret-file \"\$\$secret_chroot\" --gocryptfs-password-file \"\$\$gocryptfs_chroot\" --force-secret-update"
         } > "\$\$script_host"
         chmod 0700 "\$\$script_host"
         echo "CSS_CLIENT_ROLLOUT_BEGIN node=\$\$node server_url=$SERVER_URL release=$CSS_RELEASE_VERSION" | tee -a "\$\$log"
@@ -160,7 +174,7 @@ services:
         else
           rc=\$\$?
         fi
-        rm -f "\$\$secret_host" "\$\$script_host"
+        rm -f "\$\$secret_host" "\$\$gocryptfs_host" "\$\$script_host"
         if test "\$\$rc" -eq 0; then
           echo "CSS_CLIENT_ROLLOUT_OK node=\$\$node" | tee -a "\$\$log"
         else
@@ -170,6 +184,8 @@ services:
     secrets:
       - source: node_secret
         target: node_secret
+      - source: gocryptfs_password
+        target: gocryptfs_password
     volumes:
       - type: bind
         source: /
@@ -184,16 +200,22 @@ services:
 secrets:
   node_secret:
     external: true
-    name: $SECRET_NAME
+    name: $NODE_SECRET_NAME
+  gocryptfs_password:
+    external: true
+    name: $GOCRYPTFS_SECRET_NAME
 EOF
 
 docker_cmd stack deploy -c "$WORK/stack.yml" "$STACK" >/dev/null
 service="${STACK}_rollout"
 for _ in $(seq 1 1800); do
   docker_cmd service ps "$service" --no-trunc --format '{{.Node}}|{{.CurrentState}}|{{.Error}}' > "$WORK/service-ps.txt" 2>/dev/null || true
+  docker_cmd service logs --raw "$service" > "$WORK/logs.txt" 2>&1 || true
   completed=$(awk -F'|' '$2 ~ /^Complete/ {print $1}' "$WORK/service-ps.txt" | sort -u | wc -l | tr -d ' ')
-  failed=$(awk -F'|' '$2 ~ /^Failed|^Rejected/ || $3 != "" {n++} END {print n+0}' "$WORK/service-ps.txt")
+  ok_logs=$(awk '$1 == "CSS_CLIENT_ROLLOUT_OK" {print $2}' "$WORK/logs.txt" | sed 's/^node=//' | sort -u | wc -l | tr -d ' ')
+  failed=$(awk -F'|' '$2 ~ /^Failed|^Rejected/ || ($3 != "" && $2 !~ /^Shutdown/) {n++} END {print n+0}' "$WORK/service-ps.txt")
   terminal=$((completed + failed))
+  test "$ok_logs" -ge "$NODES_MIN" && break
   test "$completed" -ge "$NODES_MIN" && break
   test "$terminal" -ge "$NODES_MIN" && break
   sleep 2
@@ -203,12 +225,16 @@ docker_cmd service logs --raw "$service" > "$WORK/logs.txt" 2>&1 || true
 docker_cmd service ps "$service" --no-trunc --format '{{.Node}}|{{.CurrentState}}|{{.Error}}' > "$WORK/service-ps.txt" 2>/dev/null || true
 cat "$WORK/logs.txt"
 completed=$(awk -F'|' '$2 ~ /^Complete/ {print $1}' "$WORK/service-ps.txt" | sort -u | wc -l | tr -d ' ')
-failed=$(awk -F'|' '$2 ~ /^Failed|^Rejected/ || $3 != "" {n++} END {print n+0}' "$WORK/service-ps.txt")
-ok_logs=$(awk '$1 == "CSS_CLIENT_ROLLOUT_OK" {n++} END {print n+0}' "$WORK/logs.txt")
-if test "$completed" -lt "$NODES_MIN" || test "$failed" -gt 0; then
+failed=$(awk -F'|' '$2 ~ /^Failed|^Rejected/ || ($3 != "" && $2 !~ /^Shutdown/) {n++} END {print n+0}' "$WORK/service-ps.txt")
+ok_logs=$(awk '$1 == "CSS_CLIENT_ROLLOUT_OK" {print $2}' "$WORK/logs.txt" | sed 's/^node=//' | sort -u | wc -l | tr -d ' ')
+success_nodes=$completed
+if test "$ok_logs" -gt "$success_nodes"; then
+  success_nodes=$ok_logs
+fi
+if test "$success_nodes" -lt "$NODES_MIN" || test "$failed" -gt 0; then
   docker_cmd service ps "$service" --no-trunc || true
-  echo "CSS_SWARM_CLIENT_ROLLOUT_FAILED completed=$completed ok_logs=$ok_logs failed=$failed min=$NODES_MIN ready=$ready_nodes logs=$WORK/logs.txt" >&2
+  echo "CSS_SWARM_CLIENT_ROLLOUT_FAILED completed=$completed ok_logs=$ok_logs success_nodes=$success_nodes failed=$failed min=$NODES_MIN ready=$ready_nodes logs=$WORK/logs.txt" >&2
   exit 1
 fi
 
-echo "CSS_SWARM_CLIENT_ROLLOUT_OK completed=$completed ok_logs=$ok_logs min=$NODES_MIN ready=$ready_nodes logs=$WORK/logs.txt"
+echo "CSS_SWARM_CLIENT_ROLLOUT_OK completed=$completed ok_logs=$ok_logs success_nodes=$success_nodes min=$NODES_MIN ready=$ready_nodes logs=$WORK/logs.txt"

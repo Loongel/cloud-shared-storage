@@ -109,7 +109,7 @@ The package also includes the lower-level `cs-storage-systemd-node-install` for 
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.13/cs-storage_0.1.13_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.14/cs-storage_0.1.14_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -128,9 +128,9 @@ Use `--role server` or `--role client` for split server/client deployments. Set 
 Secret rules:
 
 - `node_secret` must be identical on server and clients. Server/all generates it only on first install if absent; client-only requires it.
-- `gocryptfs_password` is generated only on first client/all install if absent. Back it up before using encrypted volumes.
+- `gocryptfs_password` is generated only on first server/all/client install if absent. It must be identical on clients that need to read the same encrypted shared volume. Server/all prints it in the client bootstrap command by default. Back it up before using encrypted volumes.
 - Repeat installs reuse existing secret files. Different replacement values are refused unless `--force-secret-update` is passed, and the old file is backed up first.
-- Server/all installer output prints a client bootstrap command containing `node_secret` by default. Treat that command and `/etc/cs-storage/client-install-command.sh` as secrets; pass `--no-print-client-secret` to suppress it.
+- Server/all installer output prints a client bootstrap command containing `node_secret` and `gocryptfs_password` by default. Treat that command and `/etc/cs-storage/client-install-command.sh` as secrets; pass `--no-print-client-secret` to suppress it.
 - Node id defaults to the NetBird FQDN from `netbird status`, then host name. Pass `--node-id` only when you need a fixed custom identity.
 - Use `--bind-interface <iface>`, `--server-addr <addr:port>`, or `--public-url <url>` only when the default `wt0` address and NetBird FQDN are not correct for the client network.
 

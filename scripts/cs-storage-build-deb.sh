@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.13}
+VERSION=${VERSION:-0.1.14}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -20,7 +20,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.13.
+  --version VERSION       Package version, default 0.1.14.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.

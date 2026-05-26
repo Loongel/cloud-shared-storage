@@ -157,6 +157,19 @@ backend_node_candidates() {
   fi
 }
 
+backend_storage_candidates() {
+  node=$1
+  mode=$2
+  case "$mode" in
+    shared)
+      printf '%s\n' "_shared"
+      ;;
+    *)
+      backend_node_candidates "$node"
+      ;;
+  esac
+}
+
 backend_marker_rel() {
   storage_node=$1
   scenario=$2
@@ -250,7 +263,7 @@ backend_check() {
     tmp=$(mktemp /tmp/css-backend.XXXXXX)
     if [ "$crypt" = "true" ]; then
       plaintext_found=0
-      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+      for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
         rel=$(backend_marker_rel "$storage_node" "$scenario" "$node" "$docker_volume")
         if curl_backend "$rel" > "$tmp" 2>/dev/null; then
           plaintext_found=1
@@ -270,7 +283,7 @@ backend_check() {
       deadline=$(( $(date +%s) + 60 ))
       while :; do
         fetched=0
-        for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+        for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
           rel=$(backend_sqlite_rel "$storage_node" "$docker_volume")
           if curl_backend "$rel" > "$tmp" 2>/dev/null; then
             fetched=1
@@ -303,7 +316,7 @@ backend_check() {
     deadline=$(( $(date +%s) + 60 ))
     while :; do
       fetched=0
-      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+      for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
         rel=$(backend_marker_rel "$storage_node" "$scenario" "$node" "$docker_volume")
         legacy_rel="nodes/$storage_node/css-scenario-test/$RUN_ID/$scenario/writers/$node.txt"
         if curl_backend "$rel" > "$tmp" 2>/dev/null || curl_backend "$legacy_rel" > "$tmp" 2>/dev/null; then
@@ -333,7 +346,7 @@ backend_check() {
   if [ "$crypt" = "true" ]; then
     cipher_ok=0
     for node in $(printf '%s\n' "$expected_visible" | tr ',' ' '); do
-      for storage_node in $(backend_node_candidates "$node" | awk '!seen[$0]++'); do
+      for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
         if curl_backend "$(backend_cipher_rel "$storage_node" "$docker_volume")" >/dev/null 2>&1 || curl_backend "nodes/$storage_node/cipher/gocryptfs.conf" >/dev/null 2>&1; then
           cipher_ok=1
           break
