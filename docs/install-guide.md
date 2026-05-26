@@ -96,6 +96,14 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
   prompts after library upgrades.
 - Final install output is separated into highlighted summary blocks. Set
   `CSS_OUTPUT_COLOR=never` to disable ANSI color.
+- Client/all installs also write usable shared-multi defaults:
+  `CS_GLUSTER_REMOTE`, `CS_LITEFS_ADVERTISE_URL`, and
+  `CS_RCLONE_SYNC_INTERVAL=30s`.
+- Server/all installs create and start a default host GlusterFS volume named
+  `css_shared` when GlusterFS is available.
+- Client/all installs create a local encrypted Kopia filesystem repository for
+  `cs.backup=true`, with config at `/etc/cs-storage/kopia.repository.config`
+  and password at `/etc/cs-storage/secrets/kopia_password`.
 
 If an existing `/etc/cs-storage/server.env` or `daemon.env` is present, repeat
 installs reuse values from those files instead of choosing new values.
@@ -119,6 +127,13 @@ installs reuse values from those files instead of choosing new values.
 - Changing it after encrypted volumes exist makes old encrypted data unreadable.
 - Back up `/etc/cs-storage/secrets/gocryptfs_password` before using encrypted
   volumes.
+
+`kopia_password` decrypts local backup snapshots created by `cs.backup=true`.
+
+- Client/all generates it only on first install when absent.
+- Existing file and repository config are reused on repeat install.
+- Back up `/etc/cs-storage/secrets/kopia_password` together with
+  `/etc/cs-storage/kopia.repository.config`.
 
 Backend credentials are never generated. Fresh server/all install requires either:
 

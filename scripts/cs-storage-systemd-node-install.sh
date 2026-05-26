@@ -20,6 +20,7 @@ RESTART_SERVICES=${RESTART_SERVICES:-1}
 SERVICE_USER=${SERVICE_USER:-cs-storage}
 SERVICE_GROUP=${SERVICE_GROUP:-$SERVICE_USER}
 CSS_ALLOW_SECRET_REPLACE=${CSS_ALLOW_SECRET_REPLACE:-no}
+CSS_BIND_INTERFACE=${CSS_BIND_INTERFACE:-wt0}
 
 CS_SERVER_ADDR=${CS_SERVER_ADDR:-:18080}
 CS_SERVER_URL=${CS_SERVER_URL:-}
@@ -32,6 +33,22 @@ CS_NODE_SECRET_KEY_FILE=${CS_NODE_SECRET_KEY_FILE:-}
 CS_GOCRYPTFS_PASSWORD_FILE=${CS_GOCRYPTFS_PASSWORD_FILE:-}
 CS_COORDINATOR_TOKEN_FILE=${CS_COORDINATOR_TOKEN_FILE:-}
 CS_NODE_ID=${CS_NODE_ID:-$(hostname)}
+CS_GLUSTER_REMOTE=${CS_GLUSTER_REMOTE:-}
+CS_GLUSTER_VOLUME=${CS_GLUSTER_VOLUME:-css_shared}
+CS_GLUSTER_BRICK=${CS_GLUSTER_BRICK:-$STATE_DIR/gluster/$CS_GLUSTER_VOLUME/brick}
+CS_RCLONE_SYNC_INTERVAL=${CS_RCLONE_SYNC_INTERVAL:-30s}
+CS_LITEFS_HTTP_ADDR=${CS_LITEFS_HTTP_ADDR:-:20202}
+CS_LITEFS_LEASE_TYPE=${CS_LITEFS_LEASE_TYPE:-static}
+CS_LITEFS_ADVERTISE_URL=${CS_LITEFS_ADVERTISE_URL:-}
+CS_LITEFS_CONSUL_URL=${CS_LITEFS_CONSUL_URL:-}
+CS_LITEFS_CONSUL_KEY=${CS_LITEFS_CONSUL_KEY:-}
+CS_LITEFS_CONSUL_TTL=${CS_LITEFS_CONSUL_TTL:-10s}
+CS_LITEFS_CONSUL_LOCK_DELAY=${CS_LITEFS_CONSUL_LOCK_DELAY:-1s}
+CS_KOPIA_CONFIG_PATH=${CS_KOPIA_CONFIG_PATH:-$ENV_DIR/kopia.repository.config}
+CS_KOPIA_REPOSITORY_PATH=${CS_KOPIA_REPOSITORY_PATH:-$STATE_DIR/kopia-repository}
+CS_KOPIA_PASSWORD_FILE=${CS_KOPIA_PASSWORD_FILE:-$SECRET_DIR/kopia_password}
+CS_KOPIA_SNAPSHOT_INTERVAL=${CS_KOPIA_SNAPSHOT_INTERVAL:-30s}
+CS_KOPIA_POLICY_ARGS=${CS_KOPIA_POLICY_ARGS:---keep-latest=24 --keep-daily=7}
 
 usage() {
   cat <<'EOF'
@@ -57,6 +74,16 @@ Options:
   --gocryptfs-password-file P    File containing gocryptfs passphrase.
   --coordinator-token-file P     Optional LiteFS/Consul-compatible token file.
   --node-id ID                   Node id for daemon, default hostname.
+  --bind-interface IFACE         Interface used for default LiteFS advertise URL, default wt0.
+  --gluster-remote REMOTE        GlusterFS remote, default derived from server URL.
+  --gluster-volume NAME          Server-side default GlusterFS volume, default css_shared.
+  --rclone-sync-interval DUR     Shared-multi backend sync interval, default 30s.
+  --litefs-advertise-url URL     LiteFS advertise base URL, default derived from bind interface.
+  --litefs-lease-type TYPE       LiteFS lease type, default static.
+  --kopia-config-path FILE       Kopia config path for cs.backup=true.
+  --kopia-repository-path DIR    Default filesystem Kopia repository path.
+  --kopia-password-file FILE     Kopia repository password file.
+  --kopia-snapshot-interval DUR  Kopia snapshot interval, default 30s.
   --install-deps                 Install apt host dependencies. Requires ACK_INSTALL_HOST_DEPS=yes.
   --no-install-deps              Do not install apt dependencies.
   --enable-now                   Enable and start/restart selected services, default.
@@ -96,6 +123,16 @@ while test "$#" -gt 0; do
     --gocryptfs-password-file) shift; CS_GOCRYPTFS_PASSWORD_FILE=$1 ;;
     --coordinator-token-file) shift; CS_COORDINATOR_TOKEN_FILE=$1 ;;
     --node-id) shift; CS_NODE_ID=$1 ;;
+    --bind-interface) shift; CSS_BIND_INTERFACE=$1 ;;
+    --gluster-remote) shift; CS_GLUSTER_REMOTE=$1 ;;
+    --gluster-volume) shift; CS_GLUSTER_VOLUME=$1; CS_GLUSTER_BRICK=${CS_GLUSTER_BRICK:-$STATE_DIR/gluster/$CS_GLUSTER_VOLUME/brick} ;;
+    --rclone-sync-interval) shift; CS_RCLONE_SYNC_INTERVAL=$1 ;;
+    --litefs-advertise-url) shift; CS_LITEFS_ADVERTISE_URL=$1 ;;
+    --litefs-lease-type) shift; CS_LITEFS_LEASE_TYPE=$1 ;;
+    --kopia-config-path) shift; CS_KOPIA_CONFIG_PATH=$1 ;;
+    --kopia-repository-path) shift; CS_KOPIA_REPOSITORY_PATH=$1 ;;
+    --kopia-password-file) shift; CS_KOPIA_PASSWORD_FILE=$1 ;;
+    --kopia-snapshot-interval) shift; CS_KOPIA_SNAPSHOT_INTERVAL=$1 ;;
     --install-deps) INSTALL_DEPS=1 ;;
     --no-install-deps) INSTALL_DEPS=0 ;;
     --enable-now) ENABLE_NOW=1 ;;
@@ -129,6 +166,56 @@ need_file() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing command: $1" >&2; exit 1; }
+}
+
+random_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n'
+  fi
+}
+
+interface_ipv4() {
+  iface=$1
+  command -v ip >/dev/null 2>&1 || return 1
+  ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{split($4, a, "/"); print a[1]; exit}'
+}
+
+url_host() {
+  printf '%s\n' "$1" | awk '
+    {
+      v=$0
+      sub(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, "", v)
+      sub(/^[^@]*@/, "", v)
+      if (v ~ /^\[/) {
+        sub(/^\[/, "", v)
+        sub(/\].*$/, "", v)
+      } else {
+        sub(/[/:].*$/, "", v)
+      }
+      print v
+    }'
+}
+
+default_litefs_advertise_url() {
+  ip=$(interface_ipv4 "$CSS_BIND_INTERFACE" || true)
+  if test -n "$ip"; then
+    printf 'http://%s:20202\n' "$ip"
+    return
+  fi
+  printf 'http://%s:20202\n' "$CS_NODE_ID"
+}
+
+default_gluster_remote() {
+  host=$(url_host "$CS_SERVER_URL" || true)
+  if test -z "$host"; then
+    host=$(interface_ipv4 "$CSS_BIND_INTERFACE" || true)
+  fi
+  if test -z "$host"; then
+    host=127.0.0.1
+  fi
+  printf '%s:/%s\n' "$host" "$CS_GLUSTER_VOLUME"
 }
 
 role_has_server() { test "$ROLE" = server || test "$ROLE" = all; }
@@ -189,6 +276,54 @@ install_deps() {
     -o Dpkg::Options::=--force-confold \
     install -y --no-install-recommends \
     ca-certificates fuse3 rclone gocryptfs glusterfs-client glusterfs-server sqlite3
+}
+
+ensure_default_gluster_volume() {
+  role_has_server || return
+  command -v gluster >/dev/null 2>&1 || return
+  systemctl enable glusterd.service >/dev/null 2>&1 || true
+  systemctl start glusterd.service >/dev/null 2>&1 || true
+  install -d -m 0755 "$CS_GLUSTER_BRICK"
+  if gluster volume info "$CS_GLUSTER_VOLUME" >/dev/null 2>&1; then
+    gluster volume start "$CS_GLUSTER_VOLUME" >/dev/null 2>&1 || true
+    return
+  fi
+  brick_host=$(interface_ipv4 "$CSS_BIND_INTERFACE" || true)
+  if test -z "$brick_host"; then
+    brick_host=127.0.0.1
+  fi
+  gluster volume create "$CS_GLUSTER_VOLUME" "$brick_host:$CS_GLUSTER_BRICK" force >/dev/null
+  gluster volume start "$CS_GLUSTER_VOLUME" >/dev/null 2>&1 || true
+}
+
+ensure_default_kopia_repository() {
+  role_has_client || return
+  command -v kopia >/dev/null 2>&1 || return
+  install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$CS_KOPIA_REPOSITORY_PATH" "$(dirname -- "$CS_KOPIA_CONFIG_PATH")"
+  if test ! -s "$CS_KOPIA_PASSWORD_FILE"; then
+    umask 077
+    random_secret > "$CS_KOPIA_PASSWORD_FILE"
+    chown root:"$SERVICE_GROUP" "$CS_KOPIA_PASSWORD_FILE"
+    chmod 0640 "$CS_KOPIA_PASSWORD_FILE"
+  else
+    chown root:"$SERVICE_GROUP" "$CS_KOPIA_PASSWORD_FILE"
+    chmod 0640 "$CS_KOPIA_PASSWORD_FILE"
+  fi
+  if test -s "$CS_KOPIA_CONFIG_PATH"; then
+    chown root:"$SERVICE_GROUP" "$CS_KOPIA_CONFIG_PATH" || true
+    chmod 0640 "$CS_KOPIA_CONFIG_PATH" || true
+    return
+  fi
+  pass=$(sed -n '1p' "$CS_KOPIA_PASSWORD_FILE")
+  KOPIA_PASSWORD=$pass kopia repository create filesystem \
+    --path "$CS_KOPIA_REPOSITORY_PATH" \
+    --config-file "$CS_KOPIA_CONFIG_PATH" \
+    --password "$pass" \
+    --no-persist-credentials \
+    --no-check-for-updates \
+    --log-dir "$LOG_DIR/kopia" >/dev/null
+  chown root:"$SERVICE_GROUP" "$CS_KOPIA_CONFIG_PATH"
+  chmod 0640 "$CS_KOPIA_CONFIG_PATH"
 }
 
 download_file() {
@@ -367,6 +502,12 @@ write_envs() {
   fi
 
   if role_has_client; then
+    if test -z "$CS_GLUSTER_REMOTE"; then
+      CS_GLUSTER_REMOTE=$(default_gluster_remote)
+    fi
+    if test -z "$CS_LITEFS_ADVERTISE_URL"; then
+      CS_LITEFS_ADVERTISE_URL=$(default_litefs_advertise_url)
+    fi
     {
       printf 'CS_DAEMON_SOCKET=/run/cs-storage.sock\n'
       printf 'CS_ROOT_DIR=%s\n' "$ROOT_DIR"
@@ -379,6 +520,19 @@ write_envs() {
       printf 'CS_RCLONE_VFS_CACHE_MODE=writes\n'
       printf 'CS_RCLONE_VFS_WRITE_BACK=\n'
       printf 'CS_RCLONE_VFS_CACHE_MAX_SIZE=\n'
+      printf 'CS_RCLONE_SYNC_INTERVAL=%s\n' "$CS_RCLONE_SYNC_INTERVAL"
+      printf 'CS_GLUSTER_REMOTE=%s\n' "$CS_GLUSTER_REMOTE"
+      printf 'CS_LITEFS_HTTP_ADDR=%s\n' "$CS_LITEFS_HTTP_ADDR"
+      printf 'CS_LITEFS_LEASE_TYPE=%s\n' "$CS_LITEFS_LEASE_TYPE"
+      printf 'CS_LITEFS_ADVERTISE_URL=%s\n' "$CS_LITEFS_ADVERTISE_URL"
+      test -z "$CS_LITEFS_CONSUL_URL" || printf 'CS_LITEFS_CONSUL_URL=%s\n' "$CS_LITEFS_CONSUL_URL"
+      test -z "$CS_LITEFS_CONSUL_KEY" || printf 'CS_LITEFS_CONSUL_KEY=%s\n' "$CS_LITEFS_CONSUL_KEY"
+      printf 'CS_LITEFS_CONSUL_TTL=%s\n' "$CS_LITEFS_CONSUL_TTL"
+      printf 'CS_LITEFS_CONSUL_LOCK_DELAY=%s\n' "$CS_LITEFS_CONSUL_LOCK_DELAY"
+      printf 'CS_KOPIA_CONFIG_PATH=%s\n' "$CS_KOPIA_CONFIG_PATH"
+      printf 'CS_KOPIA_PASSWORD_FILE=%s\n' "$CS_KOPIA_PASSWORD_FILE"
+      printf 'CS_KOPIA_SNAPSHOT_INTERVAL=%s\n' "$CS_KOPIA_SNAPSHOT_INTERVAL"
+      printf 'CS_KOPIA_POLICY_ARGS=%s\n' "$CS_KOPIA_POLICY_ARGS"
     } > "$ENV_DIR/daemon.env"
     chown root:"$SERVICE_GROUP" "$ENV_DIR/daemon.env"
     chmod 0640 "$ENV_DIR/daemon.env"
@@ -438,7 +592,9 @@ validate_inputs
 install_deb_package
 install_deps
 ensure_user_and_dirs
+ensure_default_gluster_volume
 install_binaries
+ensure_default_kopia_repository
 install_units
 write_envs
 restart_selected

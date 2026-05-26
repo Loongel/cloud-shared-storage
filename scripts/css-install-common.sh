@@ -458,7 +458,7 @@ css_install() {
   test -n "$node_secret_file" || die "--node-secret or --node-secret-file is required for a fresh client install; use the client command printed by the server installer"
   installer=$(find_installer)
 
-  set -- --role "$role" --driver-name "$DRIVER_NAME" --deb-url "$CSS_DEB_URL" --node-id "$NODE_ID" --node-secret-file "$node_secret_file"
+  set -- --role "$role" --driver-name "$DRIVER_NAME" --deb-url "$CSS_DEB_URL" --node-id "$NODE_ID" --node-secret-file "$node_secret_file" --bind-interface "$CSS_BIND_INTERFACE"
 
   if test "$INSTALL_DEPS" = "1"; then
     export ACK_INSTALL_HOST_DEPS=yes

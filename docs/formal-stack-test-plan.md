@@ -44,6 +44,36 @@ Architecture invariants:
 - Fixes for encrypted realtime volumes must keep the gocryptfs + rclone VFS
   model unless the design documents are explicitly revised.
 
+## Merged Delivery Execution Plan
+
+This plan is the single execution path for delivery. New runtime findings are
+merged back here instead of creating a competing plan.
+
+1. Preserve the architecture from `技术方案.v0.txt` and `技术方案.v1.txt`:
+   production CSS components are host services, the Docker VolumeDriver is only
+   a thin proxy, S-side owns backend credentials, and C-side owns rclone,
+   gocryptfs, GlusterFS, LiteFS, Kopia, and router orchestration.
+2. Use `docs/scenario-test-design.md` as the scenario authority: all 36 valid
+   combinations are requested by the `full` profile, `cs.backup` is strictly
+   `true` or `false`, and invalid combinations are negative controls.
+3. Use this file as the repair and evidence plan: run profiles in the order
+   `smoke`, `core`, `backup-only`, `shared-multi-only`, then `full`; every
+   failure must be classified as product, packaging/configuration, or harness.
+4. Apply fixes at the production layer first. If GlusterFS, LiteFS, Kopia,
+   gocryptfs, rclone, router, daemon, plugin, package dependencies, or systemd
+   lifecycle behavior are wrong, fix the deb/systemd/daemon path rather than
+   masking the issue in Stack workloads.
+5. Keep Stack tests as application workloads only. They may create volumes,
+   write/read files, exercise SQLite, and generate reports, but they must not
+   launch CSS server, daemon, plugin, GlusterFS, or LiteFS as replacement
+   product containers.
+6. Treat service startup as part of delivery. The CSS plugin socket must be
+   available early enough that Docker can restore existing `css` volumes during
+   boot; daemon/plugin units must not wait on Docker in a way that creates a
+   startup cycle.
+7. Delivery is not complete until the reports and service evidence listed in
+   "Pass Criteria For Delivery" exist for the final package/release candidate.
+
 ## Current Findings
 
 These findings came from the first hd01 test attempts on 2026-05-26.

@@ -5,7 +5,7 @@ VERSION=${VERSION:-0.1.5}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
-BUILD_BINARIES=${BUILD_BINARIES:-auto}
+BUILD_BINARIES=${BUILD_BINARIES:-1}
 DEB_COMPRESSION=${DEB_COMPRESSION:-xz}
 INCLUDE_RUNTIME_TOOLS=${INCLUDE_RUNTIME_TOOLS:-1}
 LITEFS_IMAGE=${LITEFS_IMAGE:-flyio/litefs:0.5}
@@ -25,7 +25,7 @@ Options:
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
   --compression FORMAT    dpkg-deb compression, default xz.
-  --build-binaries        Always rebuild Go binaries before packaging.
+  --build-binaries        Always rebuild Go binaries before packaging, default.
   --no-build-binaries     Require existing binaries in --bin-dir.
   --runtime-tools         Require and bundle litefs/kopia, default.
   --no-runtime-tools      Do not bundle litefs/kopia; development packages only.
@@ -93,8 +93,9 @@ build_binaries() {
     return
   fi
   need_cmd docker
-  docker run --rm --network host -v "$ROOT:/src" -w /src golang:1.22-bookworm sh -lc '
+  docker run --rm --network host -v "$ROOT:/src" -w /src golang:1.22-bookworm sh -c '
     set -eu
+    export PATH=/usr/local/go/bin:/go/bin:$PATH
     mkdir -p "$0"
     go test ./...
     go build -buildvcs=false -o "$0/cs-storage-server" ./cmd/cs-storage-server

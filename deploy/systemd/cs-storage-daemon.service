@@ -1,8 +1,7 @@
 [Unit]
 Description=CS-Storage C-side host daemon
-After=network-online.target docker.service
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
 Type=simple

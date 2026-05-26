@@ -358,6 +358,12 @@ backup_check() {
   config=$(read_daemon_value CS_KOPIA_CONFIG_PATH 2>/dev/null || true)
   repo=$(read_daemon_value CS_KOPIA_REPOSITORY 2>/dev/null || true)
   password=$(read_daemon_value CS_KOPIA_PASSWORD 2>/dev/null || true)
+  if [ -z "$password" ]; then
+    password_file=$(read_daemon_value CS_KOPIA_PASSWORD_FILE 2>/dev/null || true)
+    if [ -n "$password_file" ] && [ -s "$password_file" ]; then
+      IFS= read -r password < "$password_file" || password=
+    fi
+  fi
   if [ -z "$config" ] && [ -z "$repo" ]; then
     printf 'BLOCKED:kopia_config_missing'
     return

@@ -1,7 +1,8 @@
 [Unit]
 Description=CS-Storage Docker VolumeDriver thin proxy
-After=docker.service cs-storage-daemon.service
-Requires=docker.service cs-storage-daemon.service
+After=cs-storage-daemon.service
+Before=docker.service
+Requires=cs-storage-daemon.service
 
 [Service]
 Type=simple

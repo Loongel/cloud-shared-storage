@@ -3,8 +3,12 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -103,15 +107,12 @@ func (s *Server) writeLiteFSConfig(meta volume.Metadata, fuseDir string, dataDir
 	if err := os.MkdirAll(layout.Config, 0o700); err != nil {
 		return "", err
 	}
-	httpAddr := s.cfg.LiteFSHTTPAddr
-	if httpAddr == "" {
-		httpAddr = ":20202"
-	}
+	httpAddr, advertiseURL := s.liteFSHTTP(meta.Name)
 	leaseType := s.cfg.LiteFSLeaseType
 	if leaseType == "" {
 		leaseType = "static"
 	}
-	if s.cfg.LiteFSAdvertiseURL == "" {
+	if advertiseURL == "" {
 		return "", fmt.Errorf("LiteFS generated config requires CS_LITEFS_ADVERTISE_URL")
 	}
 	if leaseType == "consul" && s.cfg.LiteFSConsulURL == "" {
@@ -122,7 +123,7 @@ func (s *Server) writeLiteFSConfig(meta volume.Metadata, fuseDir string, dataDir
 	fmt.Fprintf(&b, "data:\n  dir: %s\n", quoteYAML(dataDir))
 	fmt.Fprintf(&b, "http:\n  addr: %s\n", quoteYAML(httpAddr))
 	fmt.Fprintf(&b, "lease:\n  type: %s\n", quoteYAML(leaseType))
-	fmt.Fprintf(&b, "  advertise-url: %s\n", quoteYAML(s.cfg.LiteFSAdvertiseURL))
+	fmt.Fprintf(&b, "  advertise-url: %s\n", quoteYAML(advertiseURL))
 	if s.cfg.LiteFSCandidate {
 		fmt.Fprintf(&b, "  candidate: true\n")
 	}
@@ -149,6 +150,47 @@ func (s *Server) writeLiteFSConfig(meta volume.Metadata, fuseDir string, dataDir
 	}
 	path := filepath.Join(layout.Config, "litefs.yml")
 	return path, os.WriteFile(path, []byte(b.String()), 0o600)
+}
+
+func (s *Server) liteFSHTTP(volumeName string) (string, string) {
+	port := liteFSPort(volumeName)
+	httpAddr := strings.TrimSpace(s.cfg.LiteFSHTTPAddr)
+	advertise := strings.TrimSpace(s.cfg.LiteFSAdvertiseURL)
+	if httpAddr == "" || httpAddr == ":20202" || httpAddr == "0.0.0.0:20202" {
+		host := "127.0.0.1"
+		if advertise != "" {
+			if u, err := url.Parse(advertise); err == nil && u.Host != "" {
+				if h, _, err := net.SplitHostPort(u.Host); err == nil && h != "" {
+					host = h
+				} else {
+					host = u.Hostname()
+				}
+			}
+		}
+		httpAddr = net.JoinHostPort(host, strconv.Itoa(port))
+	}
+	if advertise == "" {
+		host, _, err := net.SplitHostPort(httpAddr)
+		if err != nil || host == "" {
+			host = "127.0.0.1"
+		}
+		advertise = "http://" + net.JoinHostPort(host, strconv.Itoa(port))
+		return httpAddr, advertise
+	}
+	if u, err := url.Parse(advertise); err == nil && u.Scheme != "" && u.Host != "" {
+		host := u.Hostname()
+		if host != "" {
+			u.Host = net.JoinHostPort(host, strconv.Itoa(port))
+			advertise = u.String()
+		}
+	}
+	return httpAddr, advertise
+}
+
+func liteFSPort(volumeName string) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(volumeName))
+	return 21000 + int(h.Sum32()%20000)
 }
 
 func (s *Server) liteFSEnv() []string {
