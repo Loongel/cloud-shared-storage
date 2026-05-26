@@ -276,7 +276,6 @@ install_deps() {
   export LANG=C
   export LANGUAGE=C
   export NEEDRESTART_MODE=a
-  repair_dpkg_state
   apt-get update
   apt-get \
     -o Dpkg::Options::=--force-confdef \
