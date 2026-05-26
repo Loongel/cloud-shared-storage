@@ -358,6 +358,16 @@ func (s *Server) mount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err.Error())
 		return
 	}
+	s.rootMu.Lock()
+	defer s.rootMu.Unlock()
+	layout := s.layout(req.Name)
+	for _, dir := range []string{layout.Mountpoint, layout.Remote, layout.Cipher, layout.Cache, layout.Logs, layout.Config, layout.LiteFSData, layout.LiteFSMount, layout.Gluster, layout.LocalDisk} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			s.auditError("mount", req.Name, req.ID, err.Error())
+			writeError(w, err.Error())
+			return
+		}
+	}
 	if err := s.ensureRealtimeRclone(r.Context(), runtimeMeta); err != nil {
 		s.auditError("mount", req.Name, req.ID, err.Error())
 		writeError(w, err.Error())
@@ -375,11 +385,6 @@ func (s *Server) mount(w http.ResponseWriter, r *http.Request) {
 	}
 	addMountRef(&meta, req.ID)
 	if err := s.store.Upsert(meta); err != nil {
-		s.auditError("mount", req.Name, req.ID, err.Error())
-		writeError(w, err.Error())
-		return
-	}
-	if err := os.MkdirAll(runtimeMeta.Mountpoint, 0o700); err != nil {
 		s.auditError("mount", req.Name, req.ID, err.Error())
 		writeError(w, err.Error())
 		return
