@@ -81,6 +81,8 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 - Host dependencies: installed by default; pass `--no-install-deps` to skip.
 - Services: enabled and started by default.
 - Release package: latest configured script release URL.
+- Release `.deb` packages are built with `xz` compression for compatibility
+  with older `dpkg` versions that do not support `control.tar.zst`.
 - Apt/deb installation is forced non-interactive, including `needrestart`
   prompts after library upgrades.
 - Final install output is separated into highlighted summary blocks. Set
