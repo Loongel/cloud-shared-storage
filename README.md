@@ -204,7 +204,7 @@ git push origin main v0.1.5
 
 For normal installs, use the role-specific one-command wrappers.
 
-Server only, for a dedicated gateway node. Required: backend URL and backend auth only. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret` and prints a ready-to-run client install command containing that same secret.
+Server only, for a dedicated gateway node. Required: backend URL and backend auth only. This starts `cs-storage-server.service` only; it does not install the local Docker volume driver services. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret` and prints a ready-to-run client install command containing that same secret.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
@@ -232,7 +232,7 @@ by the server/all installer. The server-printed client command embeds this value
 so a client node does not need a separate file-copy step. Treat that command as
 a secret because it grants access to the CSS server.
 
-Server plus client on the same node. Required: backend URL and backend auth only. The local client uses the local server URL automatically.
+Server plus client on the same node. Required: backend URL and backend auth only. This starts all three services: `cs-storage-server.service`, `cs-storage-daemon.service`, and `cs-storage-plugin.service`. The local client uses the local server URL automatically.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh \

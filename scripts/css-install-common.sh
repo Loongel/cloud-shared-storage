@@ -574,6 +574,19 @@ css_print_secret_summary() {
   echo "  generated=$(awk '$1 == "generated" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
   echo "  reused=$(awk '$1 == "reused" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
   echo "  updated=$(awk '$1 == "updated" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
+  case "$role" in
+    server)
+      echo "  expected_services=cs-storage-server.service"
+      echo "  note=server-only install does not create daemon/plugin client config"
+      echo "  local_driver_install=curl -fsSL $CSS_REPO_RAW/scripts/css-install-all.sh | sudo sh -s --"
+      ;;
+    client)
+      echo "  expected_services=cs-storage-daemon.service cs-storage-plugin.service"
+      ;;
+    all)
+      echo "  expected_services=cs-storage-server.service cs-storage-daemon.service cs-storage-plugin.service"
+      ;;
+  esac
   summary_warn "IMPORTANT: back up node_secret on server/all installs; every client must use the same node_secret."
   summary_warn "IMPORTANT: back up gocryptfs_password before using encrypted volumes; changing it makes old encrypted data unreadable."
   case "$role" in

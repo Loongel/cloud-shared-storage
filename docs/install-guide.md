@@ -9,6 +9,13 @@ Use the role-specific wrappers for normal installs:
 - `css-install-client.sh`: client daemon plus Docker VolumeDriver plugin only.
 - `css-install-all.sh`: server plus client on the same node.
 
+`css-install-server.sh` is intentionally server-only. It enables and starts
+`cs-storage-server.service` only; it does not create `daemon.env` or
+`plugin.env`, so `cs-storage-daemon.service` and `cs-storage-plugin.service`
+remain disabled/inactive unless client config already exists from an earlier
+client/all install. Use `css-install-all.sh` on a gateway node that should also
+provide the local Docker volume driver.
+
 The lower-level `cs-storage-systemd-node-install.sh` is for advanced automation
 and package tests.
 
@@ -61,7 +68,9 @@ printed by the server installer, or pass the value with `--node-secret
 manages that secret as a file.
 
 Server plus client on the same node requires backend storage details only. The
-local client URL is inferred from the same NetBird-facing server URL:
+local client URL is inferred from the same NetBird-facing server URL. This is
+the command to use when the server node itself should run all three systemd
+services: `cs-storage-server`, `cs-storage-daemon`, and `cs-storage-plugin`.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh \
