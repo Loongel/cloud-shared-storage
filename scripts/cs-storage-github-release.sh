@@ -4,7 +4,7 @@ set -eu
 OWNER=${OWNER:-Loongel}
 REPO=${REPO:-cloud-shared-storage}
 VISIBILITY=${VISIBILITY:-public}
-VERSION=${VERSION:-0.1.5}
+VERSION=${VERSION:-0.1.6}
 DEB=${DEB:-dist/cs-storage_${VERSION}_amd64.deb}
 DEB_SET=${DEB_SET:-0}
 REMOTE=${REMOTE:-origin}
@@ -20,7 +20,7 @@ Options:
   --owner OWNER           GitHub owner/org, default Loongel.
   --repo NAME             Repository name, default cloud-shared-storage.
   --visibility private|public, default public.
-  --version VERSION       Release version, default 0.1.5.
+  --version VERSION       Release version, default 0.1.6.
   --deb PATH              Release asset path.
   --branch NAME           Branch to push, default main.
 
