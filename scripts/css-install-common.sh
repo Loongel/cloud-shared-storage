@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.7}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.8}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 CSS_DEB_URL=${CSS_DEB_URL:-https://github.com/Loongel/cloud-shared-storage/releases/download/v${CSS_RELEASE_VERSION}/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}

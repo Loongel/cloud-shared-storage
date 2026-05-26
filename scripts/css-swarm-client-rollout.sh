@@ -7,7 +7,7 @@ HELPER_IMAGE=${HELPER_IMAGE:-alpine:3.20}
 RUN_ID=${CSS_ROLLOUT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}
 SERVER_URL=${SERVER_URL:-}
 NODE_SECRET_FILE=${NODE_SECRET_FILE:-/etc/cs-storage/secrets/node_secret}
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.7}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.8}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 NODES_MIN=${NODES_MIN:-}
 WORK=${WORK:-/tmp/css-swarm-client-rollout-$RUN_ID}
@@ -193,8 +193,9 @@ for _ in $(seq 1 1800); do
   docker_cmd service ps "$service" --no-trunc --format '{{.Node}}|{{.CurrentState}}|{{.Error}}' > "$WORK/service-ps.txt" 2>/dev/null || true
   completed=$(awk -F'|' '$2 ~ /^Complete/ {print $1}' "$WORK/service-ps.txt" | sort -u | wc -l | tr -d ' ')
   failed=$(awk -F'|' '$2 ~ /^Failed|^Rejected/ || $3 != "" {n++} END {print n+0}' "$WORK/service-ps.txt")
+  terminal=$((completed + failed))
   test "$completed" -ge "$NODES_MIN" && break
-  test "$failed" -gt 0 && break
+  test "$terminal" -ge "$NODES_MIN" && break
   sleep 2
 done
 

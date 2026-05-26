@@ -168,6 +168,12 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing command: $1" >&2; exit 1; }
 }
 
+repair_dpkg_state() {
+  if command -v dpkg >/dev/null 2>&1; then
+    dpkg --configure -a
+  fi
+}
+
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 32
@@ -270,6 +276,7 @@ install_deps() {
   export LANG=C
   export LANGUAGE=C
   export NEEDRESTART_MODE=a
+  repair_dpkg_state
   apt-get update
   apt-get \
     -o Dpkg::Options::=--force-confdef \
@@ -357,6 +364,7 @@ install_deb_package() {
   export LANG=C
   export LANGUAGE=C
   export NEEDRESTART_MODE=a
+  repair_dpkg_state
   if command -v apt-get >/dev/null 2>&1; then
     apt-get \
       -o Dpkg::Options::=--force-confdef \
