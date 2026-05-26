@@ -249,6 +249,16 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	mountpoint := layout.Mountpoint
 	err = s.withRootMutable(func() error {
 		if opts.Flush {
+			if existing, ok := s.store.Get(req.Name); ok {
+				if err := s.stopVolumeProcesses(existing); err != nil {
+					return err
+				}
+			}
+			for _, path := range []string{layout.Mountpoint, layout.Remote, layout.Cipher, layout.Gluster, layout.LiteFSMount} {
+				if err := unmountPath(path); err != nil {
+					return err
+				}
+			}
 			if err := os.RemoveAll(s.volumeRoot(req.Name)); err != nil {
 				return err
 			}

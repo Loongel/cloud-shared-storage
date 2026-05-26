@@ -109,7 +109,7 @@ The package also includes the lower-level `cs-storage-systemd-node-install` for 
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.9/cs-storage_0.1.9_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.10/cs-storage_0.1.10_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
