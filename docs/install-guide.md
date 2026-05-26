@@ -19,12 +19,15 @@ Server-only fresh install requires only backend storage details:
 ```sh
 sh /tmp/css-install-server.sh \
   --backend-url https://example.invalid/dav/ \
-  --backend-user-file /etc/cs-storage/secrets/backend_user \
-  --backend-password-file /etc/cs-storage/secrets/backend_password
+  --backend-user '<webdav-user>' \
+  --backend-password '<webdav-password>'
 ```
 
-Use `--backend-auth-header-file` instead of user/password when the backend
-requires a complete Authorization header.
+The installer stores those inline values in root-owned files under
+`/etc/cs-storage/secrets/`. Use `--backend-user-file` and
+`--backend-password-file` when you already manage secrets as files. Use
+`--backend-auth-header` or `--backend-auth-header-file` instead of user/password
+when the backend requires a complete Authorization header.
 
 Client-only fresh install requires the server URL and the exact `node_secret`
 from the server:
@@ -35,14 +38,19 @@ sh /tmp/css-install-client.sh \
   --node-secret-file /etc/cs-storage/secrets/node_secret
 ```
 
+`node_secret` is the shared server/client authentication secret, not the node's
+identity. The node id is generated from `hostname` unless you pass `--node-id`.
+Copy `/etc/cs-storage/secrets/node_secret` from the server node to this same
+path on each client, or pass the value with `--node-secret '<value>'`.
+
 Server plus client on the same node requires backend storage details only. The
 local client URL is inferred:
 
 ```sh
 sh /tmp/css-install-all.sh \
   --backend-url https://example.invalid/dav/ \
-  --backend-user-file /etc/cs-storage/secrets/backend_user \
-  --backend-password-file /etc/cs-storage/secrets/backend_password
+  --backend-user '<webdav-user>' \
+  --backend-password '<webdav-password>'
 ```
 
 ## Defaults
