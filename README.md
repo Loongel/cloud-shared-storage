@@ -204,7 +204,7 @@ git push origin main v0.1.1
 
 For normal installs, use the role-specific one-command wrappers.
 
-Server only, for a dedicated gateway node. Required: backend URL and backend auth only. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret`; copy that same file securely to client nodes.
+Server only, for a dedicated gateway node. Required: backend URL and backend auth only. If you do not pass `--node-secret`, the script generates `/etc/cs-storage/secrets/node_secret` and prints a ready-to-run client install command containing that same secret.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
@@ -214,7 +214,7 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
   --backend-password '<webdav-password>'
 ```
 
-After a server/all install, the script prints a filled `CSS_CLIENT_INSTALL_COMMAND` using the NetBird FQDN from `wt0` when available.
+After a server/all install, the script prints a filled `CSS_CLIENT_INSTALL_COMMAND` using the NetBird FQDN from `wt0` when available. It also saves the same command at `/etc/cs-storage/client-install-command.sh` with mode `0600`.
 
 Client only, for an application node. Required: server URL and the server's same `node_secret`.
 
@@ -222,15 +222,15 @@ Client only, for an application node. Required: server URL and the server's same
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh \
   | sudo sh -s -- \
   --server-url http://<server-netbird-fqdn-or-wt0-ip>:<server-port> \
-  --node-secret-file /etc/cs-storage/secrets/node_secret
+  --node-secret '<node-secret-from-server-output>'
 ```
 
 `node_secret` is not the node id. The node id defaults to the NetBird FQDN from
 `netbird status`, then falls back to the host name, and can be overridden with
 `--node-id`. `node_secret` is the shared cluster authentication secret generated
-by the server/all installer; copy the server's
-`/etc/cs-storage/secrets/node_secret` to every client through a secure channel
-before running the client command.
+by the server/all installer. The server-printed client command embeds this value
+so a client node does not need a separate file-copy step. Treat that command as
+a secret because it grants access to the CSS server.
 
 Server plus client on the same node. Required: backend URL and backend auth only. The local client uses the local server URL automatically.
 
@@ -272,7 +272,7 @@ The one-command wrappers intentionally avoid surprising secret changes:
 - `gocryptfs_password` protects encrypted volume contents. It is generated only during first client/all install if absent. Changing it after encrypted data exists makes that old encrypted data unreadable.
 - Existing secret files are reused on repeat installs.
 - Passing a different secret value/file for an existing secret is refused by default. To rotate intentionally, pass `--force-secret-update`; the old file is backed up as `*.BAK.<timestamp>` first.
-- Install output prints secret file paths and SHA256 fingerprints, not secret values. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
+- Server/all install output prints a client bootstrap command containing `node_secret` by default, and saves it to `/etc/cs-storage/client-install-command.sh` with mode `0600`. Pass `--no-print-client-secret` if you want to suppress this convenience output. Back up `/etc/cs-storage/secrets/node_secret` and `/etc/cs-storage/secrets/gocryptfs_password` through your own secure channel.
 
 See `docs/install-guide.md` for scenario commands, parameter details, repeat
 install behavior, and common failure handling.

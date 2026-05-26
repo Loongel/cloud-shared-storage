@@ -37,9 +37,11 @@ back to the `wt0` IP or host name. Override with `--bind-interface`,
 `--server-addr`, or `--public-url` only when your topology requires it.
 
 At the end of a server/all install, the script prints `CSS_CLIENT_INSTALL_COMMAND`,
-a filled client one-liner using the selected public server URL. It still points
-to `--node-secret-file /etc/cs-storage/secrets/node_secret`; copy that file from
-the server to the same path on each client before running the command.
+a filled client one-liner using the selected public server URL. The command
+contains `--node-secret '<value>'`, so the client writes its own
+`/etc/cs-storage/secrets/node_secret` during install and no separate file-copy
+step is needed. The same command is saved on the server as
+`/etc/cs-storage/client-install-command.sh` with mode `0600`.
 
 Client-only fresh install requires the server URL and the exact `node_secret`
 from the server:
@@ -48,14 +50,15 @@ from the server:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh \
   | sudo sh -s -- \
   --server-url http://<server-netbird-fqdn-or-wt0-ip>:<server-port> \
-  --node-secret-file /etc/cs-storage/secrets/node_secret
+  --node-secret '<node-secret-from-server-output>'
 ```
 
 `node_secret` is the shared server/client authentication secret, not the node's
 identity. The node id defaults to the NetBird FQDN from `netbird status`, then
-falls back to the host name, unless you pass `--node-id`. Copy
-`/etc/cs-storage/secrets/node_secret` from the server node to this same path on
-each client, or pass the value with `--node-secret '<value>'`.
+falls back to the host name, unless you pass `--node-id`. Use the client command
+printed by the server installer, or pass the value with `--node-secret
+'<value>'`. Use `--node-secret-file` only when your own automation already
+manages that secret as a file.
 
 Server plus client on the same node requires backend storage details only. The
 local client URL is inferred from the same NetBird-facing server URL:
@@ -89,6 +92,8 @@ installs reuse values from those files instead of choosing new values.
 - Server/all generates it only on first install when absent.
 - Client-only never generates it.
 - Every client must use the same `node_secret` as the server.
+- Server/all prints a one-command client installer with `node_secret` inline by
+  default, and saves it as `/etc/cs-storage/client-install-command.sh`.
 - Back up `/etc/cs-storage/secrets/node_secret` immediately after first server
   install.
 
@@ -106,7 +111,9 @@ Backend credentials are never generated. Fresh server/all install requires eithe
 - `--backend-user-file` plus `--backend-password-file`, or their inline value
   equivalents.
 
-The installer never prints secret values. It prints only file paths and SHA256
+Server/all prints the client bootstrap command with `node_secret` inline by
+default. Treat that command as a secret. Pass `--no-print-client-secret` if you
+want the older file-copy style output instead. The installer also prints SHA256
 fingerprints so operators can verify that nodes are using matching secret files.
 
 ## Reinstall And Rotation
@@ -138,8 +145,9 @@ found. Pass the reachable server URL.
 
 `--node-secret or --node-secret-file is required for a fresh client install`
 
-Copy the server's `/etc/cs-storage/secrets/node_secret` to the client through a
-secure channel, then rerun with `--node-secret-file`.
+Use the `CSS_CLIENT_INSTALL_COMMAND` printed by the server/all installer, or
+rerun the client installer with `--node-secret '<value>'`. Use
+`--node-secret-file` only if your automation already placed the file locally.
 
 `refusing to replace existing <secret>`
 
