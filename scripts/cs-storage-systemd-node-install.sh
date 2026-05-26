@@ -133,6 +133,8 @@ need_cmd() {
 
 role_has_server() { test "$ROLE" = server || test "$ROLE" = all; }
 role_has_client() { test "$ROLE" = client || test "$ROLE" = all; }
+existing_server_config() { test -f "$ENV_DIR/server.env"; }
+existing_client_config() { test -f "$ENV_DIR/daemon.env" && test -f "$ENV_DIR/plugin.env"; }
 
 validate_driver_name() {
   case "$CSS_DRIVER_NAME" in
@@ -412,6 +414,21 @@ restart_selected() {
       systemctl restart cs-storage-plugin.service
     else
       systemctl start cs-storage-daemon.service cs-storage-plugin.service
+    fi
+  elif existing_client_config; then
+    systemctl enable cs-storage-daemon.service cs-storage-plugin.service >/dev/null 2>&1 || true
+    if test "$RESTART_SERVICES" = "1"; then
+      systemctl restart cs-storage-daemon.service cs-storage-plugin.service || true
+    else
+      systemctl start cs-storage-daemon.service cs-storage-plugin.service || true
+    fi
+  fi
+  if ! role_has_server && existing_server_config; then
+    systemctl enable cs-storage-server.service >/dev/null 2>&1 || true
+    if test "$RESTART_SERVICES" = "1"; then
+      systemctl restart cs-storage-server.service || true
+    else
+      systemctl start cs-storage-server.service || true
     fi
   fi
 }
