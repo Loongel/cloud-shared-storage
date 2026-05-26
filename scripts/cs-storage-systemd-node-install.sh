@@ -177,8 +177,10 @@ install_deps() {
   need_cmd apt-get
   export DEBIAN_FRONTEND=noninteractive
   export DEBIAN_PRIORITY=critical
+  export LC_ALL=C
+  export LANG=C
+  export LANGUAGE=C
   export NEEDRESTART_MODE=a
-  export NEEDRESTART_SUSPEND=1
   apt-get update
   apt-get \
     -o Dpkg::Options::=--force-confdef \
@@ -205,6 +207,8 @@ install_deb_package() {
     tmp=$(mktemp -d /tmp/cs-storage-deb.XXXXXX)
     DEB="$tmp/cs-storage.deb"
     download_file "$DEB_URL" "$DEB"
+    chmod 0755 "$tmp"
+    chmod 0644 "$DEB"
   fi
   if test -z "$DEB"; then
     return
@@ -212,8 +216,10 @@ install_deb_package() {
   test -s "$DEB" || { echo "missing deb package: $DEB" >&2; exit 1; }
   export DEBIAN_FRONTEND=noninteractive
   export DEBIAN_PRIORITY=critical
+  export LC_ALL=C
+  export LANG=C
+  export LANGUAGE=C
   export NEEDRESTART_MODE=a
-  export NEEDRESTART_SUSPEND=1
   if command -v apt-get >/dev/null 2>&1; then
     apt-get \
       -o Dpkg::Options::=--force-confdef \

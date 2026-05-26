@@ -16,6 +16,7 @@ ENABLE_NOW=${ENABLE_NOW:-1}
 FORCE_SECRET_UPDATE=${FORCE_SECRET_UPDATE:-0}
 PRINT_CLIENT_SECRET=${CSS_PRINT_CLIENT_SECRET:-1}
 CLIENT_COMMAND_FILE=${CLIENT_COMMAND_FILE:-$ENV_DIR/client-install-command.sh}
+CSS_OUTPUT_COLOR=${CSS_OUTPUT_COLOR:-auto}
 
 SERVER_ADDR=${SERVER_ADDR:-}
 SERVER_PORT=${SERVER_PORT:-}
@@ -293,6 +294,51 @@ shell_quote() {
   printf "'"
 }
 
+color_enabled() {
+  test "$CSS_OUTPUT_COLOR" = "always" && return 0
+  test "$CSS_OUTPUT_COLOR" = "never" && return 1
+  test -t 1 || return 1
+  test -z "${NO_COLOR:-}"
+}
+
+color_start() {
+  code=$1
+  color_enabled && printf '\033[%sm' "$code" || true
+}
+
+color_reset() {
+  color_enabled && printf '\033[0m' || true
+}
+
+color_line() {
+  code=$1
+  text=$2
+  if color_enabled; then
+    printf '\033[%sm%s\033[0m\n' "$code" "$text"
+  else
+    printf '%s\n' "$text"
+  fi
+}
+
+summary_rule() {
+  color_line '1;36' '======================================================================'
+}
+
+summary_title() {
+  title=$1
+  summary_rule
+  color_line '1;36' "  $title"
+  summary_rule
+}
+
+summary_warn() {
+  color_line '1;33' "$1"
+}
+
+summary_success() {
+  color_line '1;32' "$1"
+}
+
 read_secret_line() {
   file=$1
   test -s "$file" || return 1
@@ -503,6 +549,7 @@ css_print_secret_summary() {
   gocrypt_file=${3:-}
   server_url=${4:-}
   echo
+  summary_title "CSS INSTALL RESULT - SAVE THIS OUTPUT"
   echo "CSS_INSTALL_SECRET_BACKUP_REQUIRED"
   echo "  node_secret_file=$node_secret_file"
   echo "  node_secret_sha256=$(fingerprint_file "$node_secret_file")"
@@ -514,19 +561,20 @@ css_print_secret_summary() {
   echo "  generated=$(awk '$1 == "generated" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
   echo "  reused=$(awk '$1 == "reused" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
   echo "  updated=$(awk '$1 == "updated" {sub($1 FS, ""); printf "%s ", $0}' "$SECRET_STATUS_FILE" 2>/dev/null)"
-  echo "IMPORTANT: back up node_secret on server/all installs; every client must use the same node_secret."
-  echo "IMPORTANT: back up gocryptfs_password before using encrypted volumes; changing it makes old encrypted data unreadable."
+  summary_warn "IMPORTANT: back up node_secret on server/all installs; every client must use the same node_secret."
+  summary_warn "IMPORTANT: back up gocryptfs_password before using encrypted volumes; changing it makes old encrypted data unreadable."
   case "$role" in
     server|all)
       if test -n "$server_url"; then
         echo
-        echo "CSS_CLIENT_INSTALL_COMMAND"
+        summary_title "CSS CLIENT INSTALL COMMAND - SECRET"
         if test "$PRINT_CLIENT_SECRET" = "1"; then
           node_secret_value=$(read_secret_line "$node_secret_file")
           command_text=$(client_install_command "$server_url" "$node_secret_value")
           write_client_install_command_file "$command_text"
-          echo "  This command contains node_secret. Treat it as a secret."
-          echo "  saved_file=$CLIENT_COMMAND_FILE"
+          summary_warn "This command contains node_secret. Treat it as a secret."
+          echo "saved_file=$CLIENT_COMMAND_FILE"
+          echo
           printf '  %s\n' "$command_text"
         else
           echo "  Inline secret output is disabled."
@@ -537,11 +585,12 @@ css_print_secret_summary() {
           shell_quote "$node_secret_file"
           printf '\n'
         fi
+        summary_rule
       fi
       ;;
     *)
       echo "IMPORTANT: scripts never print secret values for client-only installs."
       ;;
   esac
-  echo "CSS_INSTALL_COMPLETE role=$role driver=$DRIVER_NAME"
+  summary_success "CSS_INSTALL_COMPLETE role=$role driver=$DRIVER_NAME"
 }

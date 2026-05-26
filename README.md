@@ -267,7 +267,8 @@ Use `--role server` on a gateway-only node and `--role client` on client-only no
 The role wrappers force apt/deb work into non-interactive mode, including the
 Debian/Ubuntu `needrestart` service restart prompt. If an older installer run is
 already stuck on a package configuration screen, interrupt it and rerun the
-one-command installer from GitHub.
+one-command installer from GitHub. Final install output is separated into
+highlighted summary blocks; set `CSS_OUTPUT_COLOR=never` to disable ANSI color.
 
 To uninstall, use `sudo apt-get remove -y cs-storage` to keep node data, or
 `sudo apt-get purge -y cs-storage` for full cleanup of package files, CSS

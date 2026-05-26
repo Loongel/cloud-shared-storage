@@ -83,6 +83,8 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 - Release package: latest configured script release URL.
 - Apt/deb installation is forced non-interactive, including `needrestart`
   prompts after library upgrades.
+- Final install output is separated into highlighted summary blocks. Set
+  `CSS_OUTPUT_COLOR=never` to disable ANSI color.
 
 If an existing `/etc/cs-storage/server.env` or `daemon.env` is present, repeat
 installs reuse values from those files instead of choosing new values.
@@ -183,6 +185,16 @@ Interactive `Daemons using outdated libraries` package screen
 This is the operating system `needrestart` prompt. Current installers suppress
 it automatically. If an older install is already stuck on that screen, interrupt
 that run and rerun the one-command installer from GitHub.
+
+`perl: warning: Setting locale failed`
+
+The apt/deb stage now runs with `LC_ALL=C` so missing host locales do not hide
+the CSS install result in warning noise.
+
+`N: Download is performed unsandboxed as root`
+
+The installer now makes its temporary downloaded `.deb` readable by apt's `_apt`
+user, so this warning should not appear on fresh runs.
 
 ## Compose/Stack Use
 
