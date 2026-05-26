@@ -240,6 +240,8 @@ ensure_user_and_dirs() {
     useradd --system --gid "$SERVICE_GROUP" --home-dir "$STATE_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
   fi
   install -d -m 0755 "$PREFIX" "$SYSTEMD_DIR" "$ENV_DIR" "$SECRET_DIR" "$STATE_DIR" "$LOG_DIR" "$ROOT_DIR" /run/docker/plugins
+  chown root:"$SERVICE_GROUP" "$ENV_DIR"
+  chmod 0750 "$ENV_DIR"
   chown "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR" "$LOG_DIR"
   chmod 0750 "$SECRET_DIR"
   chgrp "$SERVICE_GROUP" "$SECRET_DIR"

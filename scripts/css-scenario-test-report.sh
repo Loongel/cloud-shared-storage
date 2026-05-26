@@ -10,6 +10,8 @@ TIMEOUT=${CSS_TEST_TIMEOUT:-240}
 OUT_DIR=${OUT_DIR:-}
 CHECK_BACKEND=1
 RUN_CONTROLS=1
+BACKEND_CURL_MAX_TIME=${CSS_TEST_BACKEND_CURL_MAX_TIME:-10}
+BACKEND_CURL_CONNECT_TIMEOUT=${CSS_TEST_BACKEND_CURL_CONNECT_TIMEOUT:-5}
 SERVER_ENV=${SERVER_ENV:-/etc/cs-storage/server.env}
 DAEMON_ENV=${DAEMON_ENV:-/etc/cs-storage/daemon.env}
 STACK_FILE=${STACK_FILE:-}
@@ -134,9 +136,9 @@ curl_backend() {
   rel=$1
   url=$(join_url "$BACKEND_URL" "$rel")
   if [ -n "$BACKEND_AUTH_HEADER" ]; then
-    curl -fsS -H "Authorization: $BACKEND_AUTH_HEADER" "$url"
+    curl -fsS --connect-timeout "$BACKEND_CURL_CONNECT_TIMEOUT" --max-time "$BACKEND_CURL_MAX_TIME" -H "Authorization: $BACKEND_AUTH_HEADER" "$url"
   else
-    curl -fsS -u "$BACKEND_USER:$BACKEND_PASSWORD" "$url"
+    curl -fsS --connect-timeout "$BACKEND_CURL_CONNECT_TIMEOUT" --max-time "$BACKEND_CURL_MAX_TIME" -u "$BACKEND_USER:$BACKEND_PASSWORD" "$url"
   fi
 }
 

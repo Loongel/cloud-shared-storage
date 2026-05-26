@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.2}
+VERSION=${VERSION:-0.1.3}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -17,7 +17,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.2.
+  --version VERSION       Package version, default 0.1.3.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
@@ -134,6 +134,7 @@ for bin in litefs kopia; do
 done
 
 install -m 0755 scripts/cs-storage-systemd-node-install.sh "$pkg_root/usr/local/sbin/cs-storage-systemd-node-install"
+install -m 0755 scripts/cs-storage-firewall-ensure.sh "$pkg_root/usr/local/sbin/cs-storage-firewall-ensure"
 install -m 0755 scripts/css-install-common.sh "$pkg_root/usr/local/sbin/css-install-common"
 install -m 0755 scripts/css-install-server.sh "$pkg_root/usr/local/sbin/css-install-server"
 install -m 0755 scripts/css-install-client.sh "$pkg_root/usr/local/sbin/css-install-client"
@@ -168,8 +169,9 @@ fi
 if ! id -u cs-storage >/dev/null 2>&1; then
   useradd --system --gid cs-storage --home-dir /var/lib/cs-storage --shell /usr/sbin/nologin cs-storage || true
 fi
-install -d -m 0755 /etc/cs-storage /var/lib/cs-storage /var/log/cs-storage /run/docker/plugins
+install -d -m 0750 -o root -g cs-storage /etc/cs-storage
 install -d -m 0750 -o root -g cs-storage /etc/cs-storage/secrets
+install -d -m 0755 /var/lib/cs-storage /var/log/cs-storage /run/docker/plugins
 chown cs-storage:cs-storage /var/lib/cs-storage /var/log/cs-storage || true
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true

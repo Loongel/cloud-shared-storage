@@ -110,19 +110,33 @@ docker_cmd() {
 
 label_node() {
   node=$1
-  docker_cmd node update --label-add css.test.enabled=true "$node" >/dev/null
+  node_update "$node" --label-add css.test.enabled=true
   if [ "$ENABLE_BACKUP" = "1" ]; then
-    docker_cmd node update --label-add css.test.backup=true "$node" >/dev/null
+    node_update "$node" --label-add css.test.backup=true
   fi
   if [ "$ENABLE_SQLITE" = "1" ]; then
-    docker_cmd node update --label-add css.test.sqlite=true "$node" >/dev/null
+    node_update "$node" --label-add css.test.sqlite=true
   fi
 }
 
 clear_node_labels() {
   node=$1
   for label in css.test.enabled css.test.backup css.test.sqlite; do
-    docker_cmd node update --label-rm "$label" "$node" >/dev/null 2>&1 || true
+    node_update "$node" --label-rm "$label" >/dev/null 2>&1 || true
+  done
+}
+
+node_update() {
+  node=$1
+  shift
+  i=0
+  while :; do
+    if docker_cmd node update "$@" "$node" >/dev/null; then
+      return 0
+    fi
+    i=$((i + 1))
+    [ "$i" -lt 6 ] || return 1
+    sleep "$i"
   done
 }
 
@@ -148,7 +162,7 @@ case "$LABEL_MODE" in
     NODES=$current
     ;;
   all)
-    NODES=$(docker_cmd node ls --filter status=ready --format '{{.ID}}' | tr '\n' ' ')
+    NODES=$(docker_cmd node ls --format '{{.ID}}\t{{.Status}}' | awk -F '\t' '$2 == "Ready" {print $1}' | tr '\n' ' ')
     ;;
   explicit) ;;
 esac
