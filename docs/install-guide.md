@@ -17,7 +17,8 @@ and package tests.
 Server-only fresh install requires only backend storage details:
 
 ```sh
-sh /tmp/css-install-server.sh \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
+  | sudo sh -s -- \
   --backend-url https://example.invalid/dav/ \
   --backend-user '<webdav-user>' \
   --backend-password '<webdav-password>'
@@ -29,25 +30,39 @@ The installer stores those inline values in root-owned files under
 `--backend-auth-header` or `--backend-auth-header-file` instead of user/password
 when the backend requires a complete Authorization header.
 
+By default, server/all installs bind `cs-storage-server.service` to the IPv4
+address on NetBird interface `wt0`. The public URL printed and written for
+clients uses the NetBird FQDN from `netbird status` when available, then falls
+back to the `wt0` IP or host name. Override with `--bind-interface`,
+`--server-addr`, or `--public-url` only when your topology requires it.
+
+At the end of a server/all install, the script prints `CSS_CLIENT_INSTALL_COMMAND`,
+a filled client one-liner using the selected public server URL. It still points
+to `--node-secret-file /etc/cs-storage/secrets/node_secret`; copy that file from
+the server to the same path on each client before running the command.
+
 Client-only fresh install requires the server URL and the exact `node_secret`
 from the server:
 
 ```sh
-sh /tmp/css-install-client.sh \
-  --server-url http://<server-host>:18080 \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh \
+  | sudo sh -s -- \
+  --server-url http://<server-netbird-fqdn-or-wt0-ip>:<server-port> \
   --node-secret-file /etc/cs-storage/secrets/node_secret
 ```
 
 `node_secret` is the shared server/client authentication secret, not the node's
-identity. The node id is generated from `hostname` unless you pass `--node-id`.
-Copy `/etc/cs-storage/secrets/node_secret` from the server node to this same
-path on each client, or pass the value with `--node-secret '<value>'`.
+identity. The node id defaults to the NetBird FQDN from `netbird status`, then
+falls back to the host name, unless you pass `--node-id`. Copy
+`/etc/cs-storage/secrets/node_secret` from the server node to this same path on
+each client, or pass the value with `--node-secret '<value>'`.
 
 Server plus client on the same node requires backend storage details only. The
-local client URL is inferred:
+local client URL is inferred from the same NetBird-facing server URL:
 
 ```sh
-sh /tmp/css-install-all.sh \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh \
+  | sudo sh -s -- \
   --backend-url https://example.invalid/dav/ \
   --backend-user '<webdav-user>' \
   --backend-password '<webdav-password>'
@@ -56,8 +71,10 @@ sh /tmp/css-install-all.sh \
 ## Defaults
 
 - Driver name: `css`.
-- Node id: `hostname`.
+- Node id: NetBird FQDN from `netbird status`, then host name.
+- Server bind: NetBird `wt0` IPv4 address when available.
 - Server port: first free port in `18080-18100`.
+- Public URL: NetBird FQDN when available, then `wt0` IP or host name.
 - Host dependencies: installed by default; pass `--no-install-deps` to skip.
 - Services: enabled and started by default.
 - Release package: latest configured script release URL.
@@ -100,7 +117,12 @@ If you pass a different value for an existing secret, the install refuses by
 default. For intentional rotation:
 
 ```sh
-sh /tmp/css-install-server.sh ... --force-secret-update
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
+  | sudo sh -s -- \
+  --backend-url https://example.invalid/dav/ \
+  --backend-user '<webdav-user>' \
+  --backend-password '<webdav-password>' \
+  --force-secret-update
 ```
 
 The old file is copied to `*.BAK.<timestamp>` before replacement. Do not rotate

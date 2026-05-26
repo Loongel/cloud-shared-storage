@@ -9,7 +9,8 @@ CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-
 ENV_DIR=${ENV_DIR:-/etc/cs-storage}
 SECRET_DIR=${SECRET_DIR:-$ENV_DIR/secrets}
 DRIVER_NAME=${DRIVER_NAME:-css}
-NODE_ID=${NODE_ID:-$(hostname)}
+NODE_ID=${NODE_ID:-}
+CSS_BIND_INTERFACE=${CSS_BIND_INTERFACE:-wt0}
 INSTALL_DEPS=${INSTALL_DEPS:-1}
 ENABLE_NOW=${ENABLE_NOW:-1}
 FORCE_SECRET_UPDATE=${FORCE_SECRET_UPDATE:-0}
@@ -45,7 +46,8 @@ One-command Cloud Shared Storage (CSS) $role installer.
 
 Common options:
   --driver-name NAME             Docker VolumeDriver name, default css.
-  --node-id ID                   Node id, default hostname.
+  --node-id ID                   Node id, default NetBird FQDN, then hostname.
+  --bind-interface IFACE         Default server bind interface, default wt0.
   --node-secret VALUE            Shared S/C node secret; client must match server.
   --node-secret-file FILE        File containing shared S/C node secret.
   --force-secret-update          Allow replacing existing secret files after backup.
@@ -66,7 +68,7 @@ Server options, required for server/all:
   --backend-auth-header HEADER   Prebuilt backend Authorization header.
   --backend-auth-header-file FILE
   --server-port PORT             S-side port; auto-picks 18080-18100 if absent.
-  --server-addr ADDR             S-side listen address; overrides --server-port.
+  --server-addr ADDR             S-side listen address; overrides wt0 default.
   --public-url URL               Optional public URL returned to clients.
 
 EOF
@@ -236,6 +238,55 @@ pick_server_port() {
   die "no free CSS server port in 18080-18100; pass --server-port"
 }
 
+interface_ipv4() {
+  iface=$1
+  command -v ip >/dev/null 2>&1 || return 1
+  ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{split($4, a, "/"); print a[1]; exit}'
+}
+
+netbird_fqdn() {
+  command -v netbird >/dev/null 2>&1 || return 1
+  netbird status 2>/dev/null | awk -F': *' '$1 == "FQDN" && $2 != "" {print $2; exit}'
+}
+
+host_fallback() {
+  hostname -f 2>/dev/null || hostname
+}
+
+default_node_id() {
+  nb_fqdn=$(netbird_fqdn || true)
+  if test -n "$nb_fqdn"; then
+    printf '%s\n' "$nb_fqdn"
+    return
+  fi
+  host_fallback
+}
+
+default_public_host() {
+  bind_ip=$1
+  nb_fqdn=$(netbird_fqdn || true)
+  if test -n "$nb_fqdn"; then
+    printf '%s\n' "$nb_fqdn"
+    return
+  fi
+  if test -n "$bind_ip"; then
+    printf '%s\n' "$bind_ip"
+    return
+  fi
+  host_fallback
+}
+
+addr_port() {
+  addr=$1
+  printf '%s' "$addr" | awk -F: '{print $NF}'
+}
+
+shell_quote() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
+
 read_env_value() {
   file=$1
   key=$2
@@ -263,6 +314,7 @@ parse_common_args() {
   while test "$#" -gt 0; do
     case "$1" in
       --driver-name) shift; DRIVER_NAME=$1 ;;
+      --bind-interface) shift; CSS_BIND_INTERFACE=$1 ;;
       --node-id) shift; NODE_ID=$1 ;;
       --node-secret) shift; NODE_SECRET=$1 ;;
       --node-secret-file) shift; NODE_SECRET_FILE=$1 ;;
@@ -303,6 +355,9 @@ css_install() {
 
   need_root
   ensure_secret_dir
+  if test -z "$NODE_ID"; then
+    NODE_ID=$(default_node_id)
+  fi
 
   case "$role" in
     server|all) node_secret_generate=yes ;;
@@ -328,6 +383,8 @@ css_install() {
 
   case "$role" in
     server|all)
+      bind_ip=$(interface_ipv4 "$CSS_BIND_INTERFACE" || true)
+      public_host=$(default_public_host "$bind_ip")
       if test -z "$BACKEND_URL"; then
         BACKEND_URL=$(read_env_value "$ENV_DIR/server.env" CS_BACKEND_URL || true)
       fi
@@ -336,12 +393,22 @@ css_install() {
         SERVER_ADDR=$(read_env_value "$ENV_DIR/server.env" CS_SERVER_ADDR || true)
         if test -z "$SERVER_ADDR"; then
           port=$(pick_server_port)
-          SERVER_ADDR=":$port"
+          if test -n "$bind_ip"; then
+            SERVER_ADDR="$bind_ip:$port"
+          else
+            SERVER_ADDR=":$port"
+          fi
         else
-          port=$(printf '%s' "$SERVER_ADDR" | awk -F: '{print $NF}')
+          port=$(addr_port "$SERVER_ADDR")
         fi
       else
-        port=$(printf '%s' "$SERVER_ADDR" | awk -F: '{print $NF}')
+        port=$(addr_port "$SERVER_ADDR")
+      fi
+      if test -z "$PUBLIC_URL"; then
+        PUBLIC_URL=$(read_env_value "$ENV_DIR/server.env" CS_PUBLIC_URL || true)
+      fi
+      if test -z "$PUBLIC_URL" && test -n "$public_host" && test -n "$port"; then
+        PUBLIC_URL="http://$public_host:$port"
       fi
       set -- "$@" --server-addr "$SERVER_ADDR" --backend-url "$BACKEND_URL"
       test -z "$PUBLIC_URL" || set -- "$@" --public-url "$PUBLIC_URL"
@@ -368,7 +435,16 @@ css_install() {
       fi
 
       if test "$role" = all && test -z "$SERVER_URL"; then
-        SERVER_URL="http://127.0.0.1:$port"
+        SERVER_URL=$(read_env_value "$ENV_DIR/daemon.env" CS_SERVER_URL || true)
+        if test -z "$SERVER_URL"; then
+          if test -n "$PUBLIC_URL"; then
+            SERVER_URL="$PUBLIC_URL"
+          elif test -n "$bind_ip"; then
+            SERVER_URL="http://$bind_ip:$port"
+          else
+            SERVER_URL="http://127.0.0.1:$port"
+          fi
+        fi
       fi
       ;;
   esac
@@ -386,7 +462,7 @@ css_install() {
 
   export CSS_ALLOW_SECRET_REPLACE=yes
   sh "$installer" "$@"
-  css_print_secret_summary "$role" "$node_secret_file" "${gocrypt_file:-}" "$SERVER_URL"
+  css_print_secret_summary "$role" "$node_secret_file" "${gocrypt_file:-}" "${SERVER_URL:-$PUBLIC_URL}"
 }
 
 css_print_secret_summary() {
@@ -409,5 +485,19 @@ css_print_secret_summary() {
   echo "IMPORTANT: back up node_secret on server/all installs; every client must use the same node_secret."
   echo "IMPORTANT: back up gocryptfs_password before using encrypted volumes; changing it makes old encrypted data unreadable."
   echo "IMPORTANT: scripts never print secret values; copy the files through your own secure channel."
+  case "$role" in
+    server|all)
+      if test -n "$server_url"; then
+        echo
+        echo "CSS_CLIENT_INSTALL_COMMAND"
+        echo "  First copy $node_secret_file from this server to the same path on each client."
+        printf '  curl -fsSL %s/scripts/css-install-client.sh | sudo sh -s -- --server-url ' "$CSS_REPO_RAW"
+        shell_quote "$server_url"
+        printf ' --node-secret-file '
+        shell_quote "$node_secret_file"
+        printf '\n'
+      fi
+      ;;
+  esac
   echo "CSS_INSTALL_COMPLETE role=$role driver=$DRIVER_NAME"
 }

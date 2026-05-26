@@ -60,30 +60,36 @@ The formal production install path is host systemd, not CS-Storage runtime conta
 Server only:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh -o /tmp/css-install-server.sh
-sh /tmp/css-install-server.sh \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-server.sh \
+  | sudo sh -s -- \
   --backend-url <webdav-or-s3-http-url> \
-  --backend-user-file /etc/cs-storage/secrets/backend_user \
-  --backend-password-file /etc/cs-storage/secrets/backend_password
+  --backend-user '<backend-user>' \
+  --backend-password '<backend-password>'
 ```
+
+The server/all wrapper binds the service to NetBird `wt0` by default, writes
+`CS_PUBLIC_URL` using the NetBird FQDN when available, and prints a filled
+`CSS_CLIENT_INSTALL_COMMAND` for client nodes after installation. Copy the
+server's `/etc/cs-storage/secrets/node_secret` to each client first; the
+installer deliberately does not print that secret value.
 
 Client only:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh -o /tmp/css-install-client.sh
-sh /tmp/css-install-client.sh \
-  --server-url http://<server-host>:18080 \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-client.sh \
+  | sudo sh -s -- \
+  --server-url http://<server-netbird-fqdn-or-wt0-ip>:<server-port> \
   --node-secret-file /etc/cs-storage/secrets/node_secret
 ```
 
 Server plus client on the same node:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh -o /tmp/css-install-all.sh
-sh /tmp/css-install-all.sh \
+curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/css-install-all.sh \
+  | sudo sh -s -- \
   --backend-url <webdav-or-s3-http-url> \
-  --backend-user-file /etc/cs-storage/secrets/backend_user \
-  --backend-password-file /etc/cs-storage/secrets/backend_password
+  --backend-user '<backend-user>' \
+  --backend-password '<backend-password>'
 ```
 
 The package also includes the lower-level `cs-storage-systemd-node-install` for advanced automation. It is more explicit and expects file-backed secrets:
@@ -114,6 +120,8 @@ Secret rules:
 - `gocryptfs_password` is generated only on first client/all install if absent. Back it up before using encrypted volumes.
 - Repeat installs reuse existing secret files. Different replacement values are refused unless `--force-secret-update` is passed, and the old file is backed up first.
 - Installer output shows file paths and SHA256 fingerprints only; it never prints secret values.
+- Node id defaults to the NetBird FQDN from `netbird status`, then host name. Pass `--node-id` only when you need a fixed custom identity.
+- Use `--bind-interface <iface>`, `--server-addr <addr:port>`, or `--public-url <url>` only when the default `wt0` address and NetBird FQDN are not correct for the client network.
 
 
 ## Non-Destructive Validation Order
