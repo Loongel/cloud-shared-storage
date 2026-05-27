@@ -8,11 +8,14 @@ RUN_ID=${CSS_ROLLOUT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}
 SERVER_URL=${SERVER_URL:-}
 NODE_SECRET_FILE=${NODE_SECRET_FILE:-/etc/cs-storage/secrets/node_secret}
 GOCRYPTFS_PASSWORD_FILE=${GOCRYPTFS_PASSWORD_FILE:-/etc/cs-storage/secrets/gocryptfs_password}
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.16}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.17}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 NODES_MIN=${NODES_MIN:-}
 WORK=${WORK:-/tmp/css-swarm-client-rollout-$RUN_ID}
 CLEANUP=${CLEANUP:-1}
+DOCKER_USE_SUDO=0
+DOCKER_RETRY_ATTEMPTS=${DOCKER_RETRY_ATTEMPTS:-60}
+DOCKER_RETRY_DELAY=${DOCKER_RETRY_DELAY:-5}
 
 usage() {
   cat <<EOF
@@ -57,11 +60,45 @@ while test "$#" -gt 0; do
 done
 
 docker_cmd() {
-  if docker info >/dev/null 2>&1; then
-    docker "$@"
-  else
+  if test "$DOCKER_USE_SUDO" = "1"; then
     sudo -n docker "$@"
+  else
+    docker "$@"
   fi
+}
+
+docker_cmd_retry() {
+  i=1
+  while :; do
+    out=$(docker_cmd "$@" 2>&1)
+    rc=$?
+    if test "$rc" -eq 0; then
+      printf '%s' "$out"
+      return 0
+    fi
+    case "$out" in
+      *"swarm does not have a leader"*|*"DeadlineExceeded"*|*"context deadline exceeded"*|*"rpc error"*)
+        ;;
+      *)
+        printf '%s\n' "$out" >&2
+        return "$rc"
+        ;;
+    esac
+    if test "$i" -ge "$DOCKER_RETRY_ATTEMPTS"; then
+      printf '%s\n' "$out" >&2
+      return "$rc"
+    fi
+    echo "CSS_DOCKER_RETRY attempt=$i cmd=docker $*" >&2
+    i=$((i + 1))
+    sleep "$DOCKER_RETRY_DELAY"
+  done
+}
+
+cleanup_legacy_driver_artifacts() {
+  rm -f \
+    /run/docker/plugins/cs-storage.sock \
+    /etc/docker/plugins/cs-storage.spec \
+    /etc/docker/plugins/cs-storage.json
 }
 
 read_env_value() {
@@ -89,6 +126,13 @@ test "$(id -u)" = 0 || {
   exit 1
 }
 
+if docker info >/dev/null 2>&1; then
+  DOCKER_USE_SUDO=0
+else
+  DOCKER_USE_SUDO=1
+fi
+cleanup_legacy_driver_artifacts
+
 if test -z "$SERVER_URL"; then
   SERVER_URL=$(read_env_value /etc/cs-storage/daemon.env CS_SERVER_URL || true)
 fi
@@ -105,12 +149,12 @@ test -s "$GOCRYPTFS_PASSWORD_FILE" || {
   exit 1
 }
 
-state=$(docker_cmd info --format '{{.Swarm.LocalNodeState}}')
+state=$(docker_cmd_retry info --format '{{.Swarm.LocalNodeState}}')
 test "$state" = active || {
   echo "SWARM_NOT_ACTIVE state=$state" >&2
   exit 1
 }
-ready_nodes=$(docker_cmd node ls --format '{{.Status}}' | awk '$1 == "Ready" {n++} END {print n+0}')
+ready_nodes=$(docker_cmd_retry node ls --format '{{.Status}}' | awk '$1 == "Ready" {n++} END {print n+0}')
 if test -z "$NODES_MIN"; then
   NODES_MIN=$ready_nodes
 fi
@@ -125,8 +169,8 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 docker_cmd stack rm "$STACK" >/dev/null 2>&1 || true
 docker_cmd secret rm "$NODE_SECRET_NAME" "$GOCRYPTFS_SECRET_NAME" >/dev/null 2>&1 || true
-docker_cmd secret create "$NODE_SECRET_NAME" "$NODE_SECRET_FILE" >/dev/null
-docker_cmd secret create "$GOCRYPTFS_SECRET_NAME" "$GOCRYPTFS_PASSWORD_FILE" >/dev/null
+docker_cmd_retry secret create "$NODE_SECRET_NAME" "$NODE_SECRET_FILE" >/dev/null
+docker_cmd_retry secret create "$GOCRYPTFS_SECRET_NAME" "$GOCRYPTFS_PASSWORD_FILE" >/dev/null
 
 trap cleanup EXIT INT TERM
 
@@ -206,7 +250,7 @@ secrets:
     name: $GOCRYPTFS_SECRET_NAME
 EOF
 
-docker_cmd stack deploy -c "$WORK/stack.yml" "$STACK" >/dev/null
+docker_cmd_retry stack deploy -c "$WORK/stack.yml" "$STACK" >/dev/null
 service="${STACK}_rollout"
 for _ in $(seq 1 1800); do
   docker_cmd service ps "$service" --no-trunc --format '{{.Node}}|{{.CurrentState}}|{{.Error}}' > "$WORK/service-ps.txt" 2>/dev/null || true

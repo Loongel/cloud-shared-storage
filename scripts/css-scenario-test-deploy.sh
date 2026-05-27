@@ -11,6 +11,9 @@ CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-sha
 STACK_FILE=${STACK_FILE:-}
 LABEL_MODE=current
 CLEAN=0
+DOCKER_USE_SUDO=0
+DOCKER_RETRY_ATTEMPTS=${DOCKER_RETRY_ATTEMPTS:-60}
+DOCKER_RETRY_DELAY=${DOCKER_RETRY_DELAY:-5}
 REPORT=1
 ENABLE_BACKUP=0
 ENABLE_SQLITE=0
@@ -105,11 +108,45 @@ fi
 cd "$ROOT"
 
 docker_cmd() {
-  if docker info >/dev/null 2>&1; then
-    docker "$@"
-  else
+  if [ "$DOCKER_USE_SUDO" = "1" ]; then
     sudo -n docker "$@"
+  else
+    docker "$@"
   fi
+}
+
+docker_cmd_retry() {
+  i=1
+  while :; do
+    out=$(docker_cmd "$@" 2>&1)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s' "$out"
+      return 0
+    fi
+    case "$out" in
+      *"swarm does not have a leader"*|*"DeadlineExceeded"*|*"context deadline exceeded"*|*"rpc error"*)
+        ;;
+      *)
+        printf '%s\n' "$out" >&2
+        return "$rc"
+        ;;
+    esac
+    if [ "$i" -ge "$DOCKER_RETRY_ATTEMPTS" ]; then
+      printf '%s\n' "$out" >&2
+      return "$rc"
+    fi
+    echo "CSS_DOCKER_RETRY attempt=$i cmd=docker $*" >&2
+    i=$((i + 1))
+    sleep "$DOCKER_RETRY_DELAY"
+  done
+}
+
+cleanup_legacy_driver_artifacts() {
+  rm -f \
+    /run/docker/plugins/cs-storage.sock \
+    /etc/docker/plugins/cs-storage.spec \
+    /etc/docker/plugins/cs-storage.json
 }
 
 label_node() {
@@ -126,12 +163,12 @@ label_node() {
 clear_node_labels() {
   node=$1
   for label in css.test.enabled css.test.backup css.test.sqlite; do
-    docker_cmd node update --label-rm "$label" "$node" >/dev/null 2>&1 || true
+    docker_cmd_retry node update --label-rm "$label" "$node" >/dev/null 2>&1 || true
   done
 }
 
 clear_all_test_labels() {
-  for node in $(docker_cmd node ls -q); do
+  for node in $(docker_cmd_retry node ls -q); do
     clear_node_labels "$node"
   done
 }
@@ -188,7 +225,7 @@ services:
         condition: none
 EOF
   docker_cmd stack rm "$cleanup_stack" >/dev/null 2>&1 || true
-  docker_cmd stack deploy -c "$cleanup_tmp/stack.yml" "$cleanup_stack" >/dev/null || {
+  docker_cmd_retry stack deploy -c "$cleanup_tmp/stack.yml" "$cleanup_stack" >/dev/null || {
     rm -rf "$cleanup_tmp"
     return 0
   }
@@ -292,6 +329,12 @@ run_preflight() {
   else
     printf 'socket\t/run/docker/plugins/css.sock\tFAIL\tmissing\n' >> "$pf"
   fi
+  cleanup_legacy_driver_artifacts
+  if [ -e /run/docker/plugins/cs-storage.sock ] || [ -e /etc/docker/plugins/cs-storage.spec ] || [ -e /etc/docker/plugins/cs-storage.json ]; then
+    printf 'legacy-driver\tcs-storage\tFAIL\tlegacy_artifact_still_exists\n' >> "$pf"
+  else
+    printf 'legacy-driver\tcs-storage\tPASS\tremoved\n' >> "$pf"
+  fi
 
   daemon_node=$(read_env_value /etc/cs-storage/daemon.env CS_NODE_ID 2>/dev/null || true)
   [ -n "$daemon_node" ] || daemon_node=unknown
@@ -328,7 +371,7 @@ node_update() {
   shift
   i=0
   while :; do
-    if docker_cmd node update "$@" "$node" >/dev/null; then
+    if docker_cmd_retry node update "$@" "$node" >/dev/null; then
       return 0
     fi
     i=$((i + 1))
@@ -350,14 +393,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+if docker info >/dev/null 2>&1; then
+  DOCKER_USE_SUDO=0
+else
+  DOCKER_USE_SUDO=1
+fi
+cleanup_legacy_driver_artifacts
+
 case "$LABEL_MODE" in
   current)
-    current=$(docker_cmd info --format '{{.Swarm.NodeID}}')
+    current=$(docker_cmd_retry info --format '{{.Swarm.NodeID}}')
     [ -n "$current" ] || { echo "this Docker engine is not a Swarm node" >&2; exit 1; }
     NODES=$current
     ;;
   all)
-    NODES=$(docker_cmd node ls --format '{{.ID}}\t{{.Status}}' | awk -F '\t' '$2 == "Ready" {print $1}' | tr '\n' ' ')
+    NODES=$(docker_cmd_retry node ls --format '{{.ID}}\t{{.Status}}' | awk -F '\t' '$2 == "Ready" {print $1}' | tr '\n' ' ')
     ;;
   explicit) ;;
 esac
@@ -372,7 +422,7 @@ done
 
 NODE_NAMES=$(
   for node in $NODES; do
-    docker_cmd node inspect --format '{{.Description.Hostname}}' "$node"
+    docker_cmd_retry node inspect --format '{{.Description.Hostname}}' "$node"
   done | sort | tr '\n' ',' | sed 's/,$//'
 )
 WRITER_NODE=$(printf '%s\n' "$NODE_NAMES" | tr ',' '\n' | sed '/^$/d' | sort | sed -n '1p')
@@ -403,7 +453,7 @@ export CSS_TEST_EXPECT_NODES=$EXPECT_NODES
 export CSS_TEST_WRITER_NODE=$WRITER_NODE
 export CSS_TEST_VERIFY_TIMEOUT=$VERIFY_TIMEOUT
 export CSS_TEST_FLUSH_SETTLE_SECONDS=$FLUSH_SETTLE_SECONDS
-docker_cmd stack deploy -c "$STACK_FILE" "$STACK"
+docker_cmd_retry stack deploy -c "$STACK_FILE" "$STACK"
 
 if [ "$REPORT" = "1" ]; then
   "$ROOT/scripts/css-scenario-test-report.sh" --stack "$STACK" --run-id "$RUN_ID" --profile "$PROFILE" --node-names "$NODE_NAMES" --writer-node "$WRITER_NODE" --timeout "$TIMEOUT" --stack-file "$STACK_FILE" --out-dir "$OUT_DIR"

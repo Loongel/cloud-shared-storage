@@ -21,7 +21,7 @@ services:
         condition: none
 volumes:
   data:
-    driver: cs-storage
+    driver: css
     labels:
       cs.mode: shared
       cs.write: multi
