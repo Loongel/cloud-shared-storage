@@ -255,12 +255,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 					return err
 				}
 			}
-			for _, path := range []string{layout.Mountpoint, layout.Remote, layout.Cache, layout.Cipher, layout.Gluster, layout.LiteFSMount} {
-				if err := unmountPath(path); err != nil {
-					return err
-				}
-			}
-			if err := os.RemoveAll(s.volumeRoot(req.Name)); err != nil {
+			if err := cleanupVolumeRoot(layout); err != nil {
 				return err
 			}
 		}
@@ -328,7 +323,7 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.withRootMutable(func() error {
 		if opts.Flush {
-			if err := os.RemoveAll(s.volumeRoot(req.Name)); err != nil {
+			if err := cleanupVolumeRoot(s.layout(req.Name)); err != nil {
 				return err
 			}
 		}

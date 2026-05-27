@@ -79,6 +79,24 @@ func TestUnsupportedChattrDoesNotFailStartup(t *testing.T) {
 	}
 }
 
+func TestCleanupVolumeRootRemovesUnmountedResidualTree(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{cfg: Config{RootDir: root}}
+	layout := s.layout("vol")
+	if err := os.MkdirAll(filepath.Join(layout.Mountpoint, "stale"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(layout.Mountpoint, "stale", "file.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupVolumeRoot(layout); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(layout.Root); !os.IsNotExist(err) {
+		t.Fatalf("expected volume root removed, err=%v", err)
+	}
+}
+
 func installFakeChattr(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()
