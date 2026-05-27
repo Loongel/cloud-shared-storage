@@ -14,6 +14,9 @@ CLEAN=0
 DOCKER_USE_SUDO=0
 DOCKER_RETRY_ATTEMPTS=${DOCKER_RETRY_ATTEMPTS:-60}
 DOCKER_RETRY_DELAY=${DOCKER_RETRY_DELAY:-5}
+MAX_TASKS_PER_DEPLOY=${CSS_TEST_MAX_TASKS_PER_DEPLOY:-24}
+ALLOW_LARGE_DEPLOY=${CSS_TEST_ALLOW_LARGE_DEPLOY:-0}
+ALLOW_UNSTABLE_SWARM=${CSS_TEST_ALLOW_UNSTABLE_SWARM:-0}
 REPORT=1
 ENABLE_BACKUP=0
 ENABLE_SQLITE=0
@@ -46,6 +49,9 @@ Options:
   --clean                   Remove the previous stack and known test volumes first.
   --clear-labels            Remove css.test.* labels from selected nodes after deploy/report.
   --no-preflight            Skip host/service/backend preflight probes.
+  --max-tasks-per-deploy N  Refuse deploys larger than N service-node tasks, default 24.
+  --allow-large-deploy      Allow a deploy above --max-tasks-per-deploy.
+  --allow-unstable-swarm    Skip recent Swarm/memberlist instability gate.
   --no-report               Deploy only; do not run the report script.
   -h, --help                Show help.
 
@@ -71,6 +77,9 @@ while [ "$#" -gt 0 ]; do
     --clean) CLEAN=1 ;;
     --clear-labels) CLEAR_LABELS=1 ;;
     --no-preflight) PREFLIGHT=0 ;;
+    --max-tasks-per-deploy) shift; MAX_TASKS_PER_DEPLOY=$1 ;;
+    --allow-large-deploy) ALLOW_LARGE_DEPLOY=1 ;;
+    --allow-unstable-swarm) ALLOW_UNSTABLE_SWARM=1 ;;
     --no-report) REPORT=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -199,53 +208,6 @@ remove_old_stack_state() {
     [ -n "$vol" ] || continue
     docker_cmd volume rm "$vol" >/dev/null 2>&1 || true
   done
-  cleanup_remote_node_state
-}
-
-cleanup_remote_node_state() {
-  cleanup_stack="${STACK}_cleanup"
-  cleanup_tmp=$(mktemp -d /tmp/css-scenario-cleanup.XXXXXX)
-  cat > "$cleanup_tmp/stack.yml" <<EOF
-version: "3.8"
-services:
-  cleanup:
-    image: docker:27-cli
-    entrypoint:
-      - /bin/sh
-      - -c
-    command:
-      - |
-        docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}' | while read -r v; do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
-        docker run --rm --privileged --pid host --network host -v /:/host alpine:3.20 chroot /host /bin/sh -c 'set -eu; for d in /mnt/cs_storage/vols/${STACK}_css_* /mnt/cs_storage/vols/css_preflight_*; do test -e "\$\$d" || continue; for sub in mount cache local/cipher remote gluster litefs-mount; do i=0; while grep -q " \$\$d/\$\$sub " /proc/self/mountinfo 2>/dev/null && test "\$\$i" -lt 20; do umount -lf "\$\$d/\$\$sub" >/dev/null 2>&1 || true; i=\$\$((i + 1)); done; done; rm -rf "\$\$d"; done'
-    volumes:
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-    deploy:
-      mode: global
-      restart_policy:
-        condition: none
-EOF
-  docker_cmd stack rm "$cleanup_stack" >/dev/null 2>&1 || true
-  docker_cmd_retry stack deploy -c "$cleanup_tmp/stack.yml" "$cleanup_stack" >/dev/null || {
-    rm -rf "$cleanup_tmp"
-    return 0
-  }
-  service="${cleanup_stack}_cleanup"
-  for _ in $(seq 1 120); do
-    states=$(docker_cmd service ps "$service" --format '{{.CurrentState}}\t{{.Error}}' 2>/dev/null || true)
-    active=$(printf '%s\n' "$states" | awk -F '\t' '
-      $1 ~ /^(New|Pending|Assigned|Accepted|Preparing|Ready|Starting|Running)/ {
-        if ($1 ~ /^Pending/ && $2 ~ /node not available for new tasks/) next
-        n++
-      }
-      END {print n+0}
-    ')
-    [ "$active" = "0" ] && break
-    sleep 1
-  done
-  docker_cmd stack rm "$cleanup_stack" >/dev/null 2>&1 || true
-  rm -rf "$cleanup_tmp"
 }
 
 read_env_value() {
@@ -403,6 +365,72 @@ node_update() {
   done
 }
 
+selected_nodes_ready() {
+  for node in $NODES; do
+    state=$(docker_cmd_retry node inspect --format '{{.Status.State}}' "$node" 2>/dev/null || true)
+    msg=$(docker_cmd_retry node inspect --format '{{.Status.Message}}' "$node" 2>/dev/null || true)
+    if [ "$state" != ready ]; then
+      echo "CSS_SWARM_UNSTABLE node=$node state=$state message=$msg" >&2
+      return 1
+    fi
+  done
+}
+
+cluster_nodes_ready() {
+  bad=$(docker_cmd_retry node ls --format '{{.Hostname}}\t{{.Status}}\t{{.ManagerStatus}}' |
+    awk -F '\t' '$2 != "Ready" {print $1 ":" $2 ":" $3}')
+  if [ -n "$bad" ]; then
+    printf '%s\n' "$bad" | sed 's/^/CSS_SWARM_UNSTABLE cluster_node=/' >&2
+    return 1
+  fi
+}
+
+recent_swarm_instability() {
+  command -v journalctl >/dev/null 2>&1 || return 1
+  journalctl -u docker --since '3 minutes ago' --no-pager 2>/dev/null |
+    grep -E 'swarm does not have a leader|heartbeat failure|memberlist: .*UDP probes failed|memberlist: Failed fallback TCP ping|unknown to memberlist|Bulk sync to node .* timed out|node is no longer leader|raft proposal dropped' |
+    sed -n '1,12p'
+}
+
+swarm_stability_preflight() {
+  cluster_nodes_ready || return 1
+  selected_nodes_ready || return 1
+  if [ "$ALLOW_UNSTABLE_SWARM" = "1" ]; then
+    return 0
+  fi
+  recent=$(recent_swarm_instability || true)
+  if [ -n "$recent" ]; then
+    printf '%s\n' "$recent" >&2
+    echo "CSS_SWARM_UNSTABLE recent_docker_memberlist_or_raft_errors=1" >&2
+    echo "Wait for Swarm to become quiet, run a smaller profile, or pass --allow-unstable-swarm only for diagnostics." >&2
+    return 1
+  fi
+}
+
+count_rendered_scenarios() {
+  grep -c '^    driver: css$' "$STACK_FILE" 2>/dev/null || echo 0
+}
+
+guard_deploy_size() {
+  scenario_count=$(count_rendered_scenarios)
+  expected_tasks=$((scenario_count * EXPECT_NODES))
+  if [ "$ALLOW_LARGE_DEPLOY" = "1" ]; then
+    echo "CSS_SCENARIO_DEPLOY_SIZE scenarios=$scenario_count nodes=$EXPECT_NODES expected_tasks=$expected_tasks max=$MAX_TASKS_PER_DEPLOY allow_large=1"
+    return 0
+  fi
+  if [ "$expected_tasks" -gt "$MAX_TASKS_PER_DEPLOY" ]; then
+    cat >&2 <<EOF
+CSS_SCENARIO_DEPLOY_REFUSED_TOO_LARGE scenarios=$scenario_count nodes=$EXPECT_NODES expected_tasks=$expected_tasks max=$MAX_TASKS_PER_DEPLOY
+This guard prevents one test run from creating too many Swarm global tasks and
+overlay endpoints at once. Run a smaller profile, select fewer nodes, increase
+--max-tasks-per-deploy after Swarm is stable, or pass --allow-large-deploy only
+for controlled diagnostics.
+EOF
+    return 1
+  fi
+  echo "CSS_SCENARIO_DEPLOY_SIZE scenarios=$scenario_count nodes=$EXPECT_NODES expected_tasks=$expected_tasks max=$MAX_TASKS_PER_DEPLOY"
+}
+
 cleanup() {
   if [ "$CLEAR_LABELS" = "1" ]; then
     clear_all_test_labels
@@ -437,12 +465,6 @@ esac
 
 [ -n "$NODES" ] || { echo "no nodes selected for css scenario test" >&2; exit 1; }
 
-clear_all_test_labels
-
-for node in $NODES; do
-  label_node "$node"
-done
-
 NODE_NAMES=$(
   for node in $NODES; do
     docker_cmd_retry node inspect --format '{{.Description.Hostname}}' "$node"
@@ -459,6 +481,15 @@ if [ -z "$STACK_FILE" ]; then
 fi
 
 OUT_DIR="reports/css-scenario-$RUN_ID"
+
+swarm_stability_preflight
+guard_deploy_size
+
+clear_all_test_labels
+
+for node in $NODES; do
+  label_node "$node"
+done
 
 if [ "$CLEAN" = "1" ]; then
   remove_old_stack_state

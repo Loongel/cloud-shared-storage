@@ -300,3 +300,9 @@ only on nodes labelled by the deploy script and uses the host `css` driver.
 `full` renders all 36 valid option combinations; missing prerequisites are
 reported as `BLOCKED`, not hidden. This test stack is kept in the repository as
 an acceptance tool; it is not installed into the production `.deb`.
+
+The deploy script refuses to run when any Swarm node is not Ready, recent Docker
+logs show memberlist/raft instability, or the rendered stack would create more
+than `CSS_TEST_MAX_TASKS_PER_DEPLOY` service-node tasks at once. This prevents
+`core`/`full` profiles from amplifying overlay and UDP 7946 gossip instability.
+Use smaller profiles until the cluster is stable.

@@ -33,7 +33,9 @@ sudo sh scripts/css-scenario-test-deploy.sh \
 ## Multi-Node Formal Test
 
 After every target node has the host client services installed and the Docker
-driver socket exists at `/run/docker/plugins/css.sock`:
+driver socket exists at `/run/docker/plugins/css.sock`, first confirm every
+Swarm node is Ready and Docker logs are quiet for memberlist/raft errors. Do
+not treat a run that silently excludes a Down node as delivery evidence.
 
 ```sh
 sudo sh scripts/css-scenario-test-deploy.sh \
@@ -49,6 +51,25 @@ For SQLite workloads, use a workload image that contains `sqlite3`, for example:
 CSS_TEST_SQLITE_IMAGE=<image-with-sqlite3> \
 sudo sh scripts/css-scenario-test-deploy.sh --clean --profile full --all-ready-nodes
 ```
+
+## Swarm Stability Guard
+
+The harness refuses to deploy when any Swarm node is not Ready, recent Docker
+logs show memberlist/raft instability, or the rendered Stack would create too
+many service-node tasks at once. This is intentional. `core` and `full` can
+otherwise amplify NetBird UDP 7946 gossip instability and overlay endpoint
+churn.
+
+Defaults:
+
+- `CSS_TEST_MAX_TASKS_PER_DEPLOY=24`
+- `--allow-large-deploy` is for controlled diagnostics only.
+- `--allow-unstable-swarm` is for failure capture only.
+
+The harness no longer starts a global privileged cleanup helper. `--clean`
+removes the test Stack and local manager-side test volumes only; per-node stale
+state must be handled by the CSS driver `flush=true` path or by explicit local
+operator cleanup.
 
 ## Report Files
 

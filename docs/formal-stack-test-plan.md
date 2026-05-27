@@ -79,11 +79,15 @@ merged back here instead of creating a competing plan.
    write/read files, exercise SQLite, and generate reports, but they must not
    launch CSS server, daemon, plugin, GlusterFS, or LiteFS as replacement
    product containers.
-6. Treat service startup as part of delivery. The CSS plugin socket must be
+6. Do not deploy large `core`/`full` matrices as one Swarm update when the
+   cluster is unstable. The harness must refuse if any node is Down or recent
+   Docker logs show memberlist/raft errors; large matrices must be batched so
+   the test does not amplify NetBird UDP 7946 gossip or overlay endpoint churn.
+7. Treat service startup as part of delivery. The CSS plugin socket must be
    available early enough that Docker can restore existing `css` volumes during
    boot; daemon/plugin units must not wait on Docker in a way that creates a
    startup cycle.
-7. Delivery is not complete until the reports and service evidence listed in
+8. Delivery is not complete until the reports and service evidence listed in
    "Pass Criteria For Delivery" exist for the final package/release candidate.
 
 ## Current Findings
