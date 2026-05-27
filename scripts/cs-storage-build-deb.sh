@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.15}
+VERSION=${VERSION:-0.1.16}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -20,7 +20,7 @@ Usage: scripts/cs-storage-build-deb.sh [options]
 Build a Debian package containing CS-Storage host-service artifacts.
 
 Options:
-  --version VERSION       Package version, default 0.1.15.
+  --version VERSION       Package version, default 0.1.16.
   --arch ARCH             Debian architecture, default dpkg --print-architecture.
   --out-dir DIR           Output directory, default dist.
   --bin-dir DIR           Prebuilt binary directory, default bin.
@@ -223,6 +223,7 @@ install -d -m 0750 -o root -g cs-storage /etc/cs-storage/secrets
 chown root:cs-storage /etc/cs-storage /etc/cs-storage/secrets || true
 chmod 0750 /etc/cs-storage /etc/cs-storage/secrets || true
 install -d -m 0755 /var/lib/cs-storage /var/log/cs-storage /run/docker/plugins
+rm -f /run/docker/plugins/cs-storage.sock
 chown cs-storage:cs-storage /var/lib/cs-storage /var/log/cs-storage || true
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
@@ -255,7 +256,7 @@ if test "${1:-}" = purge; then
     find /mnt/cs_storage -depth -type d -name mount -exec umount -l {} \; >/dev/null 2>&1 || true
   fi
   rm -rf /etc/cs-storage /var/lib/cs-storage /var/log/cs-storage /mnt/cs_storage
-  rm -f /run/cs-storage.sock /run/docker/plugins/css.sock
+  rm -f /run/cs-storage.sock /run/docker/plugins/css.sock /run/docker/plugins/cs-storage.sock
   if command -v userdel >/dev/null 2>&1 && id -u cs-storage >/dev/null 2>&1; then
     userdel cs-storage >/dev/null 2>&1 || true
   fi

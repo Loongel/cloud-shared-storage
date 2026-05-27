@@ -8,6 +8,7 @@ Requires=cs-storage-daemon.service
 Type=simple
 EnvironmentFile=-/etc/cs-storage/plugin.env
 ExecStartPre=/usr/bin/mkdir -p /run/docker/plugins
+ExecStartPre=/bin/rm -f /run/docker/plugins/cs-storage.sock
 ExecStart=/usr/local/bin/cs-storage-plugin
 Restart=always
 RestartSec=3s
