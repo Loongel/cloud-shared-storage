@@ -290,8 +290,9 @@ ensure_default_gluster_volume() {
   systemctl enable glusterd.service >/dev/null 2>&1 || true
   systemctl start glusterd.service >/dev/null 2>&1 || true
   install -d -m 0755 "$CS_GLUSTER_BRICK"
+  install -d -m 0755 "$CS_GLUSTER_BRICK/.glusterfs/indices"
   if gluster volume info "$CS_GLUSTER_VOLUME" >/dev/null 2>&1; then
-    gluster volume start "$CS_GLUSTER_VOLUME" >/dev/null 2>&1 || true
+    CS_GLUSTER_VOLUME=$CS_GLUSTER_VOLUME CS_GLUSTER_BRICK=$CS_GLUSTER_BRICK /usr/lib/cs-storage/sbin/cs-storage-gluster-ensure "$ENV_DIR/daemon.env" >/dev/null 2>&1 || true
     return
   fi
   brick_host=$(interface_ipv4 "$CSS_BIND_INTERFACE" || true)
@@ -533,6 +534,8 @@ write_envs() {
       printf 'CS_RCLONE_VFS_CACHE_MAX_SIZE=\n'
       printf 'CS_RCLONE_DIR_CACHE_TIME=2s\n'
       printf 'CS_RCLONE_SYNC_INTERVAL=%s\n' "$CS_RCLONE_SYNC_INTERVAL"
+      printf 'CS_GLUSTER_VOLUME=%s\n' "$CS_GLUSTER_VOLUME"
+      printf 'CS_GLUSTER_BRICK=%s\n' "$CS_GLUSTER_BRICK"
       printf 'CS_GLUSTER_REMOTE=%s\n' "$CS_GLUSTER_REMOTE"
       printf 'CS_LITEFS_HTTP_ADDR=%s\n' "$CS_LITEFS_HTTP_ADDR"
       if test -x /usr/lib/cs-storage/bin/litefs; then

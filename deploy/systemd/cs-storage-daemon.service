@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=-/etc/cs-storage/daemon.env
 ExecStartPre=/usr/bin/mkdir -p /run /mnt/cs_storage/vols /var/lib/cs-storage /var/log/cs-storage
+ExecStartPre=-/usr/lib/cs-storage/sbin/cs-storage-gluster-ensure /etc/cs-storage/daemon.env
 ExecStart=/usr/bin/cs-storage-daemon
 Restart=always
 RestartSec=3s

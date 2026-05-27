@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION=${VERSION:-0.1.26}
+VERSION=${VERSION:-0.1.27}
 ARCH=${ARCH:-}
 OUT_DIR=${OUT_DIR:-dist}
 BIN_DIR=${BIN_DIR:-bin}
@@ -189,12 +189,13 @@ done
 
 install -m 0755 scripts/cs-storage-systemd-node-install.sh "$pkg_root/usr/lib/cs-storage/sbin/cs-storage-systemd-node-install"
 install -m 0755 scripts/cs-storage-firewall-ensure.sh "$pkg_root/usr/lib/cs-storage/sbin/cs-storage-firewall-ensure"
+install -m 0755 scripts/cs-storage-gluster-ensure.sh "$pkg_root/usr/lib/cs-storage/sbin/cs-storage-gluster-ensure"
 install -m 0755 scripts/cs-storage-auto-upgrade.sh "$pkg_root/usr/lib/cs-storage/sbin/cs-storage-auto-upgrade"
 install -m 0755 scripts/css-install-common.sh "$pkg_root/usr/lib/cs-storage/sbin/css-install-common"
 install -m 0755 scripts/css-install-server.sh "$pkg_root/usr/lib/cs-storage/sbin/css-install-server"
 install -m 0755 scripts/css-install-client.sh "$pkg_root/usr/lib/cs-storage/sbin/css-install-client"
 install -m 0755 scripts/css-install-all.sh "$pkg_root/usr/lib/cs-storage/sbin/css-install-all"
-for sbin in cs-storage-systemd-node-install cs-storage-firewall-ensure css-install-server css-install-client css-install-all; do
+for sbin in cs-storage-systemd-node-install cs-storage-firewall-ensure cs-storage-gluster-ensure css-install-server css-install-client css-install-all; do
   ln -s "../lib/cs-storage/sbin/$sbin" "$pkg_root/usr/sbin/$sbin"
 done
 for unit in cs-storage-server.service cs-storage-daemon.service cs-storage-plugin.service cs-storage-auto-upgrade.service cs-storage-auto-upgrade.timer; do
