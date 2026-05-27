@@ -4,7 +4,7 @@ set -eu
 OWNER=${OWNER:-Loongel}
 REPO=${REPO:-cloud-shared-storage}
 VISIBILITY=${VISIBILITY:-public}
-VERSION=${VERSION:-0.1.19}
+VERSION=${VERSION:-0.1.20}
 DEB=${DEB:-dist/cs-storage_${VERSION}_amd64.deb}
 DEB_SET=${DEB_SET:-0}
 REMOTE=${REMOTE:-origin}
@@ -20,7 +20,7 @@ Options:
   --owner OWNER           GitHub owner/org, default Loongel.
   --repo NAME             Repository name, default cloud-shared-storage.
   --visibility private|public, default public.
-  --version VERSION       Release version, default 0.1.19.
+  --version VERSION       Release version, default 0.1.20.
   --deb PATH              Release asset path.
   --branch NAME           Branch to push, default main.
 
@@ -95,6 +95,7 @@ if gh release view "$tag" --repo "$OWNER/$REPO" >/dev/null 2>&1; then
 else
   gh release create "$tag" "$DEB" "$sha_asset" \
     --repo "$OWNER/$REPO" \
+    --latest \
     --title "CS-Storage $tag" \
     --notes "Host systemd CS-Storage release package. Install with scripts/cs-storage-systemd-node-install.sh --deb-url <asset-url>."
 fi

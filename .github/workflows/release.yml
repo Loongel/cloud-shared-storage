@@ -9,7 +9,7 @@ on:
       version:
         description: 'Release version without v prefix'
         required: true
-        default: '0.1.19'
+        default: '0.1.20'
 
 permissions:
   contents: write
@@ -62,8 +62,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb" > "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
-          cat "dist/cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+          (
+            cd dist
+            sha256sum "cs-storage_${{ steps.version.outputs.version }}_amd64.deb" > "cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+            cat "cs-storage_${{ steps.version.outputs.version }}_amd64.deb.sha256"
+          )
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -88,6 +91,7 @@ jobs:
             gh release create "$tag" \
               "dist/cs-storage_${VERSION}_amd64.deb" \
               "dist/cs-storage_${VERSION}_amd64.deb.sha256" \
+              --latest \
               --title "CS-Storage $tag" \
               --notes "Host systemd CS-Storage release package. Install with scripts/cs-storage-systemd-node-install.sh --deb-url <asset-url>."
           fi

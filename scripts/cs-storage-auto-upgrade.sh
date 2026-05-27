@@ -8,6 +8,7 @@ LATEST_URL=${CSS_UPGRADE_LATEST_URL:-https://github.com/$OWNER/$REPO/releases/la
 ASSET_BASE=${CSS_UPGRADE_ASSET_BASE:-https://github.com/$OWNER/$REPO/releases/download}
 LOCK_DIR=${CSS_UPGRADE_LOCK_DIR:-/run/cs-storage-upgrade.lock}
 LOG_PREFIX=CSS_AUTO_UPGRADE
+tmp=
 
 log() {
   echo "$LOG_PREFIX $*"
@@ -19,6 +20,9 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
 fi
 cleanup() {
   rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
+  if test -n "$tmp"; then
+    rm -rf "$tmp" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT INT TERM
 
