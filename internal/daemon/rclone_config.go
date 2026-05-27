@@ -74,6 +74,7 @@ type RcloneMountSpec struct {
 	VFSCacheMode    string
 	VFSWriteBack    string
 	VFSCacheMaxSize string
+	DirCacheTime    string
 	RCAddr          string
 	RCUser          string
 	RCPassword      string
@@ -114,6 +115,9 @@ func (s RcloneMountSpec) Args() ([]string, error) {
 	}
 	if s.VFSCacheMaxSize != "" {
 		args = append(args, "--vfs-cache-max-size", s.VFSCacheMaxSize)
+	}
+	if s.DirCacheTime != "" {
+		args = append(args, "--dir-cache-time", s.DirCacheTime)
 	}
 	args = append(args, s.ExtraArgs...)
 	return args, nil

@@ -18,6 +18,7 @@ func main() {
 		RcloneVFSCacheMode:    config.String("CS_RCLONE_VFS_CACHE_MODE", "writes"),
 		RcloneVFSWriteBack:    config.String("CS_RCLONE_VFS_WRITE_BACK", ""),
 		RcloneVFSCacheMaxSize: config.String("CS_RCLONE_VFS_CACHE_MAX_SIZE", ""),
+		RcloneDirCacheTime:    config.String("CS_RCLONE_DIR_CACHE_TIME", "2s"),
 		RcloneExtraArgs:       config.String("CS_RCLONE_EXTRA_ARGS", ""),
 		RcloneSyncInterval:    config.Duration("CS_RCLONE_SYNC_INTERVAL", 0),
 		RcloneSyncSource:      config.String("CS_RCLONE_SYNC_SOURCE", ""),

@@ -55,6 +55,7 @@ Common environment:
 - `CS_RCLONE_VFS_CACHE_MODE`: rclone VFS cache mode, default `writes`.
 - `CS_RCLONE_VFS_WRITE_BACK`: optional rclone write-back delay.
 - `CS_RCLONE_VFS_CACHE_MAX_SIZE`: optional rclone VFS cache size cap, for example `10G`; passed as `--vfs-cache-max-size`.
+- `CS_RCLONE_DIR_CACHE_TIME`: rclone directory cache TTL, default `2s`, kept short so shared-single readers refresh remote directory state quickly after the single writer closes a file.
 - `CS_RCLONE_EXTRA_ARGS`: optional extra rclone mount/sync flags.
 - `CS_RCLONE_SYNC_INTERVAL`: enable shared multi-write periodic `rclone sync` when set, for example `5m`. Disabled by default.
 - `CS_RCLONE_SYNC_SOURCE`: optional source template for periodic sync; supports `{volume}`. Defaults to the volume mountpoint.

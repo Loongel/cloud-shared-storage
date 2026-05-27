@@ -65,6 +65,7 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 		VFSCacheMode:    s.cfg.RcloneVFSCacheMode,
 		VFSWriteBack:    s.cfg.RcloneVFSWriteBack,
 		VFSCacheMaxSize: s.cfg.RcloneVFSCacheMaxSize,
+		DirCacheTime:    s.cfg.RcloneDirCacheTime,
 		RCAddr:          s.cfg.RcloneRCAddr,
 		RCUser:          s.cfg.RcloneRCUser,
 		RCPassword:      s.cfg.RcloneRCPassword,

@@ -14,6 +14,7 @@ func TestRcloneMountArgsUseRuntimeBearerHeader(t *testing.T) {
 		Token:           "jwt-token",
 		VFSWriteBack:    "30s",
 		VFSCacheMaxSize: "10G",
+		DirCacheTime:    "2s",
 	}).Args()
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +23,7 @@ func TestRcloneMountArgsUseRuntimeBearerHeader(t *testing.T) {
 	if !strings.Contains(joined, "Authorization: Bearer jwt-token") {
 		t.Fatalf("missing bearer header in args: %#v", args)
 	}
-	for _, want := range []string{"--cache-dir\x00/cache", "--vfs-write-back\x0030s", "--vfs-cache-max-size\x0010G"} {
+	for _, want := range []string{"--cache-dir\x00/cache", "--vfs-write-back\x0030s", "--vfs-cache-max-size\x0010G", "--dir-cache-time\x002s"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in args %#v", want, args)
 		}

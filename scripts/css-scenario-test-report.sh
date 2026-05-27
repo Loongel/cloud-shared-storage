@@ -389,8 +389,14 @@ wait_for_services() {
   while :; do
     active=0
     for svc in $(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null || true); do
-      states=$(docker_cmd service ps --no-trunc --format '{{.CurrentState}}' "$svc" 2>/dev/null || true)
-      if printf '%s\n' "$states" | grep -Eq '^(New|Pending|Assigned|Accepted|Preparing|Ready|Starting|Running) '; then
+      states=$(docker_cmd service ps --no-trunc --format '{{.CurrentState}}\t{{.Error}}' "$svc" 2>/dev/null || true)
+      if printf '%s\n' "$states" | awk -F '\t' '
+        $1 ~ /^(New|Pending|Assigned|Accepted|Preparing|Ready|Starting|Running) / {
+          if ($1 ~ /^Pending/ && $2 ~ /node not available for new tasks/) next
+          found=1
+        }
+        END {exit found ? 0 : 1}
+      '; then
         active=1
       fi
     done

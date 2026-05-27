@@ -99,6 +99,9 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 - Client/all installs also write usable shared-multi defaults:
   `CS_GLUSTER_REMOTE`, `CS_LITEFS_ADVERTISE_URL`, and
   `CS_RCLONE_SYNC_INTERVAL=30s`.
+- Realtime rclone mounts default `CS_RCLONE_DIR_CACHE_TIME=2s` so
+  shared-single reader nodes refresh the single writer's directory updates
+  promptly. Increase it only when you accept slower cross-node visibility.
 - Server/all installs create and start a default host GlusterFS volume named
   `css_shared` when GlusterFS is available.
 - Client/all installs create a local encrypted Kopia filesystem repository for

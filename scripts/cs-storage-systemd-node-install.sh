@@ -531,6 +531,7 @@ write_envs() {
       printf 'CS_RCLONE_VFS_CACHE_MODE=writes\n'
       printf 'CS_RCLONE_VFS_WRITE_BACK=\n'
       printf 'CS_RCLONE_VFS_CACHE_MAX_SIZE=\n'
+      printf 'CS_RCLONE_DIR_CACHE_TIME=2s\n'
       printf 'CS_RCLONE_SYNC_INTERVAL=%s\n' "$CS_RCLONE_SYNC_INTERVAL"
       printf 'CS_GLUSTER_REMOTE=%s\n' "$CS_GLUSTER_REMOTE"
       printf 'CS_LITEFS_HTTP_ADDR=%s\n' "$CS_LITEFS_HTTP_ADDR"

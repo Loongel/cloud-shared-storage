@@ -231,8 +231,14 @@ EOF
   }
   service="${cleanup_stack}_cleanup"
   for _ in $(seq 1 120); do
-    states=$(docker_cmd service ps "$service" --format '{{.CurrentState}}' 2>/dev/null || true)
-    active=$(printf '%s\n' "$states" | awk '$1 ~ /^(New|Pending|Assigned|Accepted|Preparing|Ready|Starting|Running)$/ {n++} END {print n+0}')
+    states=$(docker_cmd service ps "$service" --format '{{.CurrentState}}\t{{.Error}}' 2>/dev/null || true)
+    active=$(printf '%s\n' "$states" | awk -F '\t' '
+      $1 ~ /^(New|Pending|Assigned|Accepted|Preparing|Ready|Starting|Running)/ {
+        if ($1 ~ /^Pending/ && $2 ~ /node not available for new tasks/) next
+        n++
+      }
+      END {print n+0}
+    ')
     [ "$active" = "0" ] && break
     sleep 1
   done

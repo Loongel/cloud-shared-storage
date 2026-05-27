@@ -26,6 +26,7 @@ type Config struct {
 	RcloneVFSCacheMode    string
 	RcloneVFSWriteBack    string
 	RcloneVFSCacheMaxSize string
+	RcloneDirCacheTime    string
 	RcloneExtraArgs       string
 	RcloneSyncInterval    time.Duration
 	RcloneSyncSource      string
