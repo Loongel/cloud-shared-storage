@@ -1,9 +1,14 @@
 #!/bin/sh
 set -eu
 
-CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-0.1.23}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
-CSS_DEB_URL=${CSS_DEB_URL:-https://github.com/Loongel/cloud-shared-storage/releases/download/v${CSS_RELEASE_VERSION}/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb}
+CSS_RELEASE_VERSION=${CSS_RELEASE_VERSION:-}
+CSS_GITHUB_OWNER=${CSS_GITHUB_OWNER:-Loongel}
+CSS_GITHUB_REPO=${CSS_GITHUB_REPO:-cloud-shared-storage}
+CSS_RELEASE_LATEST_URL=${CSS_RELEASE_LATEST_URL:-https://github.com/$CSS_GITHUB_OWNER/$CSS_GITHUB_REPO/releases/latest}
+CSS_RELEASE_API_URL=${CSS_RELEASE_API_URL:-https://api.github.com/repos/$CSS_GITHUB_OWNER/$CSS_GITHUB_REPO/releases/latest}
+CSS_RELEASE_ASSET_BASE=${CSS_RELEASE_ASSET_BASE:-https://github.com/$CSS_GITHUB_OWNER/$CSS_GITHUB_REPO/releases/download}
+CSS_DEB_URL=${CSS_DEB_URL:-}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}
 
 ENV_DIR=${ENV_DIR:-/etc/cs-storage}
@@ -59,7 +64,8 @@ Common options:
   --no-print-client-secret       Do not print/store inline client install secret.
   --install-deps                 Install host dependencies, default.
   --no-install-deps              Do not install host dependencies.
-  --deb-url URL                  CSS .deb URL, default GitHub Release v$CSS_RELEASE_VERSION.
+  --deb-url URL                  CSS .deb URL, default latest GitHub Release.
+  --release-version VERSION      Install a specific GitHub Release version.
 
 EOF
   case "$role" in
@@ -124,6 +130,43 @@ download_file() {
   else
     die "missing curl or wget"
   fi
+}
+
+fetch_url() {
+  url=$1
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO - "$url"
+  else
+    die "missing curl or wget"
+  fi
+}
+
+latest_release_version() {
+  if command -v curl >/dev/null 2>&1; then
+    effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$CSS_RELEASE_LATEST_URL" 2>/dev/null || true)
+    version=$(printf '%s\n' "$effective_url" | sed -n 's#.*/releases/tag/v\([^/?#]*\).*#\1#p' | sed -n '1p')
+    if test -n "$version"; then
+      printf '%s\n' "$version"
+      return
+    fi
+  fi
+  version=$(fetch_url "$CSS_RELEASE_API_URL" 2>/dev/null |
+    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' |
+    sed -n '1p' || true)
+  test -n "$version" || die "cannot determine latest CSS GitHub Release; pass CSS_RELEASE_VERSION or --deb-url"
+  printf '%s\n' "$version"
+}
+
+resolve_deb_url() {
+  if test -n "$CSS_DEB_URL"; then
+    return
+  fi
+  if test -z "$CSS_RELEASE_VERSION"; then
+    CSS_RELEASE_VERSION=$(latest_release_version)
+  fi
+  CSS_DEB_URL="$CSS_RELEASE_ASSET_BASE/v$CSS_RELEASE_VERSION/cs-storage_${CSS_RELEASE_VERSION}_amd64.deb"
 }
 
 random_secret() {
@@ -432,6 +475,7 @@ parse_common_args() {
       --server-url) shift; SERVER_URL=$1 ;;
       --public-url) shift; PUBLIC_URL=$1 ;;
       --deb-url) shift; CSS_DEB_URL=$1 ;;
+      --release-version) shift; CSS_RELEASE_VERSION=$1 ;;
       --install-deps) INSTALL_DEPS=1 ;;
       --no-install-deps) INSTALL_DEPS=0 ;;
       --enable-now) ENABLE_NOW=1 ;;
@@ -471,6 +515,7 @@ css_install() {
       ;;
   esac
   installer=$(find_installer)
+  resolve_deb_url
 
   set -- --role "$role" --driver-name "$DRIVER_NAME" --deb-url "$CSS_DEB_URL" --node-id "$NODE_ID" --node-secret-file "$node_secret_file" --bind-interface "$CSS_BIND_INTERFACE"
 

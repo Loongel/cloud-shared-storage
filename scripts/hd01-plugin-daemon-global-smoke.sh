@@ -1,5 +1,17 @@
 #!/bin/sh
 set -eu
+
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This historical smoke starts privileged daemon/plugin containers through Swarm.
+Production CSS runs as host systemd services from the deb package; this helper
+is disabled by default.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-plugin-daemon-global-smoke}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 TESTER_IMAGE=${TESTER_IMAGE:-docker:27-cli}

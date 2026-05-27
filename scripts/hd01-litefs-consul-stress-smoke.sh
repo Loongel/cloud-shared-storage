@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  echo "CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED script=$0" >&2
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-litefs-consul-stress-smoke}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 LAUNCHER_IMAGE=${LAUNCHER_IMAGE:-docker:27-cli}

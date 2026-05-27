@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This historical smoke uses Swarm helpers to inspect host sockets and launch
+test workloads. Use scripts/css-scenario-test-deploy.sh for formal validation.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-production-driver-smoke}
 PRECHECK_STACK=${PRECHECK_STACK:-cs-storage-production-driver-precheck}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}

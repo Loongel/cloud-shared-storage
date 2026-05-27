@@ -1,5 +1,16 @@
 #!/bin/sh
 set -eu
+
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This historical helper uses Swarm to load images on nodes. It is not part of
+the deb/systemd production install path and is disabled by default.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-image-load-smoke}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 LOADER_IMAGE=${LOADER_IMAGE:-docker:27-cli}

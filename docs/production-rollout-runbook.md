@@ -75,8 +75,7 @@ The package also enables `cs-storage-auto-upgrade.timer`. It checks GitHub
 latest Release and installs a newer deb locally on the same host while
 preserving `/etc/cs-storage` configuration and secrets. It retries transient
 GitHub/download/apt failures and uses a local lock so overlapping timer runs do
-not compete. The active-development interval is `5s`; final long-term delivery
-should use `1min`.
+not compete. The active-development interval is `5s`.
 
 Do not perform package rollout through Docker Swarm global services or
 privileged helper containers. CSS package installation and upgrades must happen
@@ -126,7 +125,7 @@ The package also includes the lower-level `cs-storage-systemd-node-install` for 
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.23/cs-storage_0.1.23_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v<version>/cs-storage_<version>_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -181,31 +180,17 @@ Run the read-only production secrets/backend preflight after SSH and Docker are 
 ./scripts/hd01-production-secrets-preflight.sh
 ```
 
-This checks `/etc/cs-storage/server.env`, `daemon.env`, `plugin.env`, and any referenced `KEY_FILE` entries on every Ready node without printing secret values. The paired bootstrap helper is guarded and dry-run by default:
-
-```sh
-CS_NODE_SECRET_KEY=<secret> \
-CS_BACKEND_URL=<webdav-or-s3-http-url> \
-CS_BACKEND_USER=<backend-user> \
-CS_BACKEND_PASSWORD=<backend-password> \
-CS_SERVER_URL=<production-server-url> \
-CS_GOCRYPTFS_PASSWORD=<gocryptfs-passphrase> \
-./scripts/hd01-production-secrets-bootstrap.sh
-```
-
-Expected dry-run token:
-
-```text
-PRODUCTION_SECRETS_BOOTSTRAP_DRY_RUN
-```
-
-Apply mode without `ACK_WRITE_PRODUCTION_SECRETS=yes` must refuse with `PRODUCTION_SECRETS_BOOTSTRAP_REFUSE_APPLY missing_ack=ACK_WRITE_PRODUCTION_SECRETS=yes`; this refusal was verified on hd01 and does not write `/etc/cs-storage`. In apply mode, the helper writes env files that reference file-backed secrets under `/run/cs-storage-secrets/*` and writes the host-side secret files under `/etc/cs-storage/secrets/*` with mode `0600`. The non-production smoke `scripts/hd01-production-secrets-bootstrap-smoke.sh` runs the same apply path against temporary `/tmp/cs-storage-production-secrets-bootstrap-smoke-env-*` directories across all Ready nodes, verifies strict preflight and `KEY_FILE_OK`, then removes the temporary tree; hd01 verified `PRODUCTION_SECRETS_BOOTSTRAP_FILE_SECRET_SMOKE_OK`.
+This checks `/etc/cs-storage/server.env`, `daemon.env`, `plugin.env`, and any referenced `KEY_FILE` entries on every Ready node without printing secret values. The historical paired bootstrap helper is disabled by default because it writes host files through a Swarm global helper. Do not use Swarm helper containers to install packages, restart host services, write `/etc/cs-storage`, or change firewall/network state across production nodes.
 
 ## Host Dependency Ownership
 
 Host dependencies and runtime tools are owned by the `cs-storage` deb package
 on each node. Do not copy LiteFS/Kopia to `/usr/local/bin` through Swarm helper
-containers and do not run the disabled `scripts/hd01-cluster-deps-rollout.sh`.
+containers and do not run disabled historical host-mutation helpers such as
+`scripts/hd01-cluster-deps-rollout.sh`,
+`scripts/css-swarm-client-rollout.sh`,
+`scripts/hd01-production-path-prepare.sh`, or
+`scripts/hd01-production-secrets-bootstrap.sh`.
 The supported paths are the role installers and the local
 `cs-storage-auto-upgrade.timer`.
 
@@ -221,9 +206,10 @@ Acceptance requires no missing tools and all Ready nodes logged.
 
 Create real env files outside git on every node or through a secure operator flow. Do not commit values.
 Use file mode `0600` for writable root-owned env files, or `0400` for read-only root-owned env files; the production preflight marks group/world-readable or writable modes as insecure.
-`server.env` and `daemon.env` must use the same node secret, either directly through `CS_NODE_SECRET_KEY` or preferably through `CS_NODE_SECRET_KEY_FILE`. Backend auth must be present through either `CS_BACKEND_AUTH_HEADER(_FILE)` or both `CS_BACKEND_USER(_FILE)` and `CS_BACKEND_PASSWORD(_FILE)`. The preflight reports mismatches without printing secret values. Prefer the role installers for writing these files locally on each node. The historical bootstrap helper is retained only for isolated lab migration work and must not be used for production cross-node host mutation:
+`server.env` and `daemon.env` must use the same node secret, either directly through `CS_NODE_SECRET_KEY` or preferably through `CS_NODE_SECRET_KEY_FILE`. Backend auth must be present through either `CS_BACKEND_AUTH_HEADER(_FILE)` or both `CS_BACKEND_USER(_FILE)` and `CS_BACKEND_PASSWORD(_FILE)`. The preflight reports mismatches without printing secret values. Prefer the role installers for writing these files locally on each node. The historical bootstrap helper is disabled by default and must not be used for production cross-node host mutation:
 
 ```sh
+CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER=yes \
 APPLY=1 ACK_WRITE_PRODUCTION_SECRETS=yes \
 CS_NODE_SECRET_KEY=<secret> \
 CS_BACKEND_URL=<webdav-or-s3-http-url> \

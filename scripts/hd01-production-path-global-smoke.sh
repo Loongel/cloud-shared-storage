@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This historical smoke runs privileged Swarm services and writes host test paths.
+It is not part of the formal delivery test path and is disabled by default.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-production-path-global-smoke}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 TESTER_IMAGE=${TESTER_IMAGE:-docker:27-cli}

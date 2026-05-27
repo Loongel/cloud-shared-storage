@@ -173,12 +173,9 @@ This repository now includes production-oriented deployment scaffolding:
 - `Dockerfile`: builds a single image containing all CS-Storage binaries plus the runtime toolchain used by the daemon paths: rclone, gocryptfs, GlusterFS client/server, sqlite3, FUSE userspace tools, LiteFS copied from `flyio/litefs:0.5`, and Kopia copied from `kopia/kopia:0.23`.
 - `deploy/systemd/*.service`: systemd units for the S-side gateway, C-side daemon, and Docker VolumeDriver thin proxy.
 - `deploy/env/*.env.example`: secret-free environment templates; copy them to `/etc/cs-storage/*.env` and fill secrets outside git.
-- `deploy/install/install.sh`: installs prebuilt binaries from `bin/`, systemd units, first-run env templates, the `cs-storage` system service user, and server-writable state/log directories.
 - `scripts/cs-storage-build-deb.sh`: builds a release `.deb` containing the five `cs-storage-*` binaries, systemd units, env examples, and the node installer.
 - `scripts/cs-storage-systemd-node-install.sh`: formal node installer for host systemd deployment. It can install a package from `--deb-url`/`--deb`, or use local `--bin-dir` only for development and recovery.
 - `.github/workflows/release.yml`: GitHub Actions workflow that builds the `.deb`, publishes a checksum artifact, and uploads both files to the GitHub Release when a `v*` tag is pushed.
-- `deploy/stack/cs-storage-server.yml`: Swarm Stack template for the S-side gateway.
-- `deploy/stack/cs-storage-daemon-global.yml` and `deploy/stack/cs-storage-plugin-global.yml`: legacy Swarm validation templates. They are not the formal production client runtime; the formal client runtime is the host `cs-storage-daemon.service` plus `cs-storage-plugin.service`.
 - `deploy/stack/example-app.yml`: example app volume declaration using labels that `cs-storage-admin render-compose` converts into `driver_opts`.
 - `deploy/stack/css-scenario-test.yml`: post-install validation stack for the host `css` driver. It is a repository test artifact, not part of the production `.deb`; it mounts real CSS volumes on labelled nodes and pairs with `scripts/css-scenario-test-deploy.sh` / `scripts/css-scenario-test-report.sh` to produce pass/fail reports with direct WebDAV backend checks.
 
@@ -189,20 +186,20 @@ Formal production deployment uses host systemd services, not long-running CS-Sto
 - `cs-storage-server.service` listens on the NetBird `wt0` IPv4 address by default, using the first free port in `18080-18100`.
 - `cs-storage-daemon.service` owns `/run/cs-storage.sock` and host mounts under `/mnt/cs_storage/vols`.
 - `cs-storage-plugin.service` owns `/run/docker/plugins/css.sock` for the Docker `css` VolumeDriver.
-- `cs-storage-auto-upgrade.timer` checks the GitHub latest Release and installs a newer `.deb` automatically. During active development the timer interval is `5s`; before final long-term delivery it should be changed to `1min`. Package upgrades replace binaries, systemd units, helper scripts, and the Docker VolumeDriver socket implementation, while preserving `/etc/cs-storage` configuration and secrets.
+- `cs-storage-auto-upgrade.timer` checks the GitHub latest Release and installs a newer `.deb` automatically. During active development the timer interval is `5s`. Package upgrades replace binaries, systemd units, helper scripts, and the Docker VolumeDriver socket implementation, while preserving `/etc/cs-storage` configuration and secrets.
 - Do not use Swarm global services or privileged helper containers to install or upgrade CSS host packages across nodes. Host package changes belong to local apt/systemd on each node through the installer or `cs-storage-auto-upgrade.timer`; Stack/Swarm is only the post-install workload validation harness.
 
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.23
+./scripts/cs-storage-build-deb.sh --version <version>
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.23
-git push origin main v0.1.23
+git tag v<version>
+git push origin main v<version>
 ```
 
 For normal installs, use the role-specific one-command wrappers.
@@ -254,7 +251,7 @@ The lower-level installer remains available for advanced automation:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.23/cs-storage_0.1.23_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v<version>/cs-storage_<version>_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -388,12 +385,12 @@ Per project instruction, do not compile or test locally. Once `ssh hd01` works, 
 ./scripts/hd01-production-secrets-preflight.sh
 ./scripts/hd01-production-stack-plan.sh
 ./scripts/hd01-production-readiness-gate.sh
-./scripts/hd01-production-secrets-bootstrap.sh  # dry-run by default; requires APPLY=1 ACK_WRITE_PRODUCTION_SECRETS=yes to write /etc/cs-storage env files
+./scripts/hd01-production-secrets-bootstrap.sh  # disabled historical helper; do not use Swarm to mutate hosts
 ```
 
 ## Production Status And Boundaries
 
-The formal delivery target is host systemd deployment: `cs-storage-server.service`, `cs-storage-daemon.service`, and `cs-storage-plugin.service` installed on the node by `scripts/cs-storage-systemd-node-install.sh`, with binaries supplied by a GitHub Release `.deb`. Earlier Swarm/container launcher evidence is retained as historical validation only; it is not the formal production runtime. The remaining boundary is destructive failure injection for Gluster/LiteFS partitions and split-brain behavior, which is intentionally excluded from the live hd01 cluster and belongs in a disposable lab.
+The formal delivery target is host systemd deployment: `cs-storage-server.service`, `cs-storage-daemon.service`, and `cs-storage-plugin.service` installed on the node by `scripts/cs-storage-systemd-node-install.sh`, with binaries supplied by a GitHub Release `.deb`. Earlier Swarm/container launcher evidence is retained as historical validation only; it is not the formal production runtime. CSS system services may open their own managed listen ports as part of local systemd startup, but Swarm/Stack helper containers must not change host firewall/network state, install packages, restart host services, or write host configuration across nodes. The remaining boundary is destructive failure injection for Gluster/LiteFS partitions and split-brain behavior, which is intentionally excluded from the live hd01 cluster and belongs in a disposable lab.
 
 - Realtime rclone/gocryptfs startup now distinguishes early child-process exit from slow mount readiness and releases parent-side log file descriptors after process start. Long-running daemon child processes now opt into ProcessManager restart supervision for unexpected exits; restart attempts keep retrying across temporary start failures until explicit Stop/unmount cancels the desired state, including pending restarts. `/readyz` reports desired managed processes that are not currently running, and metrics expose desired/unhealthy process gauges. This has hd01 unit coverage plus daemon-managed smoke coverage. A single-node host-daemon real WebDAV workload smoke now validates the intended C-side host FUSE path end-to-end on hd01. Additional hardening outside this delivery includes deeper stale-state recovery and long-running restart policy validation under real workloads.
 - GlusterFS/LiteFS orchestration has a first pass; shared multi periodic `rclone sync` now has hd01 build/unit coverage, and the deb package owns the production runtime tools and host services. Earlier Swarm global launcher smokes are retained below as historical validation evidence only; the related host-mutation helpers are disabled and must not be used for production install, upgrade, dependency rollout, or service restart. Formal package rollout is local apt/systemd per node through the role installers or `cs-storage-auto-upgrade.timer`; Stack/Swarm is only a post-install workload validation harness. `cs.backup=true` now has a real Kopia filesystem-repository smoke that creates a connected repository config, verifies a daemon-managed periodic snapshot before removal, restores the snapshot, and compares payload bytes. Kopia retention can be configured with `CS_KOPIA_POLICY_ARGS`, which runs `kopia policy set` before each snapshot and has hd01 unit coverage. A host-daemon shared-multi periodic sync smoke validates daemon-managed `rclone sync` from a configured shared-multi source directory to the real WebDAV gateway sandbox after creating a `shared+multi+sqlite` volume and writing through LiteFS. A dedicated direct LiteFS-FUSE database-file sync smoke validates daemon-managed periodic `rclone sync` directly from a LiteFS FUSE mountpoint to the real WebDAV gateway sandbox, downloads the synced `main.db`, and verifies `PRAGMA integrity_check` plus the expected row count. Multi-node production cluster write validation is complete through the formal driver and real WebDAV GET checks. Additional hardening outside this delivery includes longer-duration SQLite soak testing, deeper health supervision, and disposable-lab destructive Gluster failure-mode validation.
@@ -502,7 +499,7 @@ The Kopia backup smoke created a real filesystem Kopia repository with an explic
 
 The restore admin smoke test used a fake rclone backend to list two timestamped backups, selected the lexicographically latest backup with `restore -source-root ... -latest -volume ...`, renamed the existing target to `.BAK.<timestamp>`, and restored the selected backup into a fresh mount directory.
 
-The deploy artifacts smoke test checked installer shell syntax, Stack environment-variable parity (`STACK_ENV_PARITY_OK`), staged installer output (`INSTALL_ARTIFACTS_STAGED_OK`), systemd unit structure, Compose parsing for the gateway/daemon/plugin Stack templates, and example app volume label rendering. The daemon Stack smoke rendered `deploy/stack/cs-storage-daemon-global.yml` through both `docker compose config` and `docker stack config`, verifying the global mode, node hostname templating, declared `/dev/fuse` device, `SYS_ADMIN`, and `rshared` mount propagation fields without starting the live daemon service; the focused FUSE device smoke shows hd01 Docker Stack still ignores `devices` at deploy time. The Swarm image-load smoke distributed the hd01-built `cs-storage:hd01-smoke` image to all 4 Ready nodes through a temporary overlay-network `busybox httpd` service and `docker:27-cli` global loader service. The daemon global run smoke then started a temporary global daemon service on all 4 Ready nodes with an in-container `/tmp` socket/root, `CS_ENABLE_CHATTR=false`, and no FUSE mounts, verifying each daemon reached socket-ready state before removing the Stack. The plugin+daemon global smoke started temporary daemon, plugin, and tester services on all 4 Ready nodes using the isolated `cs-storage-swarm-smoke` VolumeDriver socket; each tester used its node-local Docker socket to create, inspect, and remove a `cs.crypt=false` volume through the same-node plugin/daemon path before the Stack was removed. The runtime image smoke built `cs-storage:hd01-smoke` and verified the final image contains all CS-Storage binaries plus LiteFS v0.5.14, Kopia 0.23.0, rclone, gocryptfs, GlusterFS client/server, sqlite3, and FUSE userspace tools. The server Stack smoke deployed `deploy/stack/cs-storage-server.yml` as a temporary Swarm Stack using the hd01-built image, verified `/healthz` on port 18080, and removed the Stack afterward.
+The deploy artifacts smoke test checked installer shell syntax, staged installer output (`INSTALL_ARTIFACTS_STAGED_OK`), systemd unit structure, and example app volume label rendering. Older gateway/daemon/plugin container Stack templates were removed because production CSS runs as host systemd services, not as long-running runtime containers.
 
 The LiteFS daemon global smoke used a Swarm global launcher plus each node local Docker socket to start temporary privileged daemon/plugin containers, created a `cs.mode=shared`, `cs.write=multi`, `cs.engine=sqlite` volume on each Ready node with `flush=true`, wrote 20 SQLite rows through the Docker VolumeDriver and real LiteFS FUSE mount, verified `PRAGMA integrity_check` returned `ok`, and removed the temporary Stack and sockets.
 

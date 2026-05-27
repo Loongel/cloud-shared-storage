@@ -99,6 +99,11 @@ curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/s
 - Client/all installs also write usable shared-multi defaults:
   `CS_GLUSTER_REMOTE`, `CS_LITEFS_ADVERTISE_URL`, and
   `CS_RCLONE_SYNC_INTERVAL=30s`.
+- CSS system services may open the CSS-managed listen ports they own, including
+  gateway/runtime ports required by the configured storage mode. That behavior
+  belongs to the local systemd service lifecycle. Swarm/Stack helper containers
+  must not be used to change host firewall, install packages, restart host
+  services, or write host configuration across nodes.
 - Realtime rclone mounts default `CS_RCLONE_DIR_CACHE_TIME=2s` so
   shared-single reader nodes refresh the single writer's directory updates
   promptly. Increase it only when you accept slower cross-node visibility.
@@ -209,8 +214,7 @@ does not mutate other nodes. Network downloads and apt/dpkg install attempts
 are retried with `CSS_UPGRADE_RETRY_ATTEMPTS` and `CSS_UPGRADE_RETRY_DELAY`;
 concurrent runs are skipped through `/run/cs-storage-upgrade.lock`.
 `/etc/cs-storage` config and secrets are preserved. During active delivery
-testing the timer interval is `5s`; before final long-term delivery change
-`OnUnitActiveSec` to `1min`.
+testing the timer interval is `5s`.
 
 Do not use Docker Swarm services, Stack workloads, or helper containers to
 install or upgrade CSS host packages across nodes. Package installation is a

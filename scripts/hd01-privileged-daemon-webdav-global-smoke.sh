@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  echo "CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED script=$0" >&2
+  exit 2
+fi
+
 GO_BIN=${GO_BIN:-/tmp/cs-storage-go/go/bin/go}
 GOFMT_BIN=${GOFMT_BIN:-$(dirname "$GO_BIN")/gofmt}
 WORKDIR=${WORKDIR:-/tmp/cs-storage-work-current}

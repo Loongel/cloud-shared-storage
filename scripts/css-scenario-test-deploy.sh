@@ -9,6 +9,7 @@ FLUSH_SETTLE_SECONDS=${CSS_TEST_FLUSH_SETTLE_SECONDS:-10}
 PROFILE=${CSS_TEST_PROFILE:-full}
 CSS_REPO_RAW=${CSS_REPO_RAW:-https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main}
 STACK_FILE=${STACK_FILE:-}
+SCENARIOS_FILE=${SCENARIOS_FILE:-}
 LABEL_MODE=current
 CLEAN=0
 DOCKER_USE_SUDO=0
@@ -49,6 +50,7 @@ Options:
   --clean                   Remove the previous stack and known test volumes first.
   --clear-labels            Remove css.test.* labels from selected nodes after deploy/report.
   --no-preflight            Skip host/service/backend preflight probes.
+  --scenarios-file FILE     Render only scenarios from this TSV file.
   --max-tasks-per-deploy N  Refuse deploys larger than N service-node tasks, default 24.
   --allow-large-deploy      Allow a deploy above --max-tasks-per-deploy.
   --allow-unstable-swarm    Skip recent Swarm/memberlist instability gate.
@@ -77,6 +79,7 @@ while [ "$#" -gt 0 ]; do
     --clean) CLEAN=1 ;;
     --clear-labels) CLEAR_LABELS=1 ;;
     --no-preflight) PREFLIGHT=0 ;;
+    --scenarios-file) shift; SCENARIOS_FILE=$1 ;;
     --max-tasks-per-deploy) shift; MAX_TASKS_PER_DEPLOY=$1 ;;
     --allow-large-deploy) ALLOW_LARGE_DEPLOY=1 ;;
     --allow-unstable-swarm) ALLOW_UNSTABLE_SWARM=1 ;;
@@ -185,7 +188,8 @@ clear_all_test_labels() {
 }
 
 scenario_volume_names() {
-  awk 'NR > 1 {print $1}' "$ROOT/deploy/scenario-test/scenarios.tsv" | while read -r sid; do
+  scenarios=${SCENARIOS_FILE:-$ROOT/deploy/scenario-test/scenarios.tsv}
+  awk 'NR > 1 {print $1}' "$scenarios" | while read -r sid; do
     [ -n "$sid" ] || continue
     printf '%s\n' "${STACK}_css_${sid}"
   done
@@ -476,11 +480,16 @@ EXPECT_NODES=$(printf '%s\n' "$NODE_NAMES" | tr ',' '\n' | sed '/^$/d' | wc -l |
 
 if [ -z "$STACK_FILE" ]; then
   RENDERED_STACK=$(mktemp /tmp/css-scenario-stack.XXXXXX.yml)
-  sh "$ROOT/deploy/scenario-test/render-stack.sh" --profile "$PROFILE" --workload-file "$ROOT/deploy/scenario-test/workload.sh" --out "$RENDERED_STACK"
+  render_args="--profile $PROFILE --workload-file $ROOT/deploy/scenario-test/workload.sh --out $RENDERED_STACK"
+  if [ -n "$SCENARIOS_FILE" ]; then
+    render_args="$render_args --scenarios $SCENARIOS_FILE"
+  fi
+  # shellcheck disable=SC2086
+  sh "$ROOT/deploy/scenario-test/render-stack.sh" $render_args
   STACK_FILE=$RENDERED_STACK
 fi
 
-OUT_DIR="reports/css-scenario-$RUN_ID"
+OUT_DIR=${OUT_DIR:-reports/css-scenario-$RUN_ID}
 
 swarm_stability_preflight
 guard_deploy_size

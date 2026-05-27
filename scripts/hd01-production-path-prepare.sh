@@ -1,6 +1,17 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This script creates host paths through a Swarm global helper. That cross-node
+host-mutation path is disabled by default. The cs-storage deb package and local
+role installers now own host path creation on each node.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-production-path-prepare}
 IMAGE=${IMAGE:-alpine:3.20}
 SMOKE=${SMOKE:-/tmp/cs-storage-production-path-prepare}

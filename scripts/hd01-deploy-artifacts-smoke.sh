@@ -15,21 +15,6 @@ docker run --rm --network host -v "$PWD:/src:ro" -v "$SMOKE:/out" -w /src "$GO_I
 grep -q 'driver_opts:' "$SMOKE/example-app.rendered.yml"
 grep -q 'cs.mode: shared' "$SMOKE/example-app.rendered.yml"
 grep -q 'cs.write: single' "$SMOKE/example-app.rendered.yml"
-CS_STORAGE_IMAGE=busybox:1.36 docker compose -f deploy/stack/cs-storage-plugin-global.yml config >/dev/null
-CS_STORAGE_IMAGE=busybox:1.36 CS_SERVER_URL=http://127.0.0.1:18080 CS_NODE_SECRET_KEY=dummy CS_GOCRYPTFS_PASSWORD=dummy docker compose -f deploy/stack/cs-storage-daemon-global.yml config > "$SMOKE/daemon-stack.yml"
-grep -q CS_LITEFS_CONSUL_KEY "$SMOKE/daemon-stack.yml"
-grep -q CS_LITEFS_CONSUL_TOKEN "$SMOKE/daemon-stack.yml"
-grep -q CS_RCLONE_SYNC_SOURCE "$SMOKE/daemon-stack.yml"
-grep -q CS_KOPIA_CONFIG_PATH "$SMOKE/daemon-stack.yml"
-grep -q CS_ROUTER_BINARY "$SMOKE/daemon-stack.yml"
-CS_STORAGE_IMAGE=busybox:1.36 CS_NODE_SECRET_KEY=dummy CS_BACKEND_URL=http://127.0.0.1:9 CS_BACKEND_USER=dummy-user CS_BACKEND_PASSWORD=dummy-pass docker compose -f deploy/stack/cs-storage-server.yml config > "$SMOKE/server-stack.yml"
-grep -q CS_BACKEND_USER "$SMOKE/server-stack.yml"
-grep -q CS_BACKEND_PASSWORD "$SMOKE/server-stack.yml"
-grep -q CS_BACKEND_USER_FILE "$SMOKE/server-stack.yml"
-grep -q CS_BACKEND_PASSWORD_FILE "$SMOKE/server-stack.yml"
-grep -q CS_NODE_SECRET_KEY_FILE "$SMOKE/server-stack.yml"
-grep -q CS_GOCRYPTFS_PASSWORD_FILE "$SMOKE/daemon-stack.yml"
-grep -q CS_COORDINATOR_TOKEN "$SMOKE/server-stack.yml"
 docker compose -f "$SMOKE/example-app.rendered.yml" config >/dev/null
 if grep -F -e '$SMOKE/server.env' -e '$SMOKE/daemon.env' -e '$SMOKE/plugin.env' scripts/hd01-production-secrets-bootstrap.sh; then
   echo "DEPLOY_ARTIFACTS_SECRET_TEMPFILE_REF_FOUND"
@@ -63,8 +48,7 @@ test -d "$SMOKE/install-state"
 test -d "$SMOKE/install-log"
 grep -q 'useradd --system' deploy/install/install.sh
 grep -q 'STATE_DIR' deploy/install/install.sh
-echo "STACK_ENV_PARITY_OK"
-echo "SERVER_STACK_FILE_SECRET_RENDER_OK"
+echo "EXAMPLE_APP_RENDER_OK"
 echo "INSTALL_ARTIFACTS_STAGED_OK"
 echo "PRODUCTION_SECRETS_BOOTSTRAP_STDIN_OK"
 echo "DEPLOY_ARTIFACTS_SMOKE_OK"

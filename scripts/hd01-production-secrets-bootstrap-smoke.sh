@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This smoke test mutates per-node host /tmp paths through a Swarm global helper.
+It is retained only as historical lab evidence and is disabled by default.
+EOF
+  exit 2
+fi
+
 RUN_ID=${RUN_ID:-$(date +%s)-$$}
 IMAGE=${IMAGE:-alpine:3.20}
 SMOKE=${SMOKE:-/tmp/cs-storage-production-secrets-bootstrap-smoke-$RUN_ID}

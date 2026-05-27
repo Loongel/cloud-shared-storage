@@ -1,6 +1,18 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  cat >&2 <<'EOF'
+CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED
+
+This script writes host /etc/cs-storage files through a Swarm global helper.
+That cross-node host-mutation path is disabled by default. Use the local
+role-specific installers on each node instead: css-install-server.sh,
+css-install-client.sh, or css-install-all.sh.
+EOF
+  exit 2
+fi
+
 STACK=${STACK:-cs-storage-production-secrets-bootstrap}
 IMAGE=${IMAGE:-alpine:3.20}
 SMOKE=${SMOKE:-/tmp/cs-storage-production-secrets-bootstrap}

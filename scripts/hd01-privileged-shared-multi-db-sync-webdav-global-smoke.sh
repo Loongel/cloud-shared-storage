@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if test "${CSS_ALLOW_HISTORICAL_SWARM_HOST_HELPER:-}" != "yes"; then
+  echo "CSS_HISTORICAL_SWARM_HOST_HELPER_DISABLED script=$0" >&2
+  exit 2
+fi
+
 WORKDIR=${WORKDIR:-/tmp/cs-storage-work-current}
 RUN_ID=${RUN_ID:-$(date +%s)-$$}
 STACK=${STACK:-cs-storage-priv-shared-db-sync-webdav-global-smoke}
