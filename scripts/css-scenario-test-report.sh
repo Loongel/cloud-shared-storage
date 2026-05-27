@@ -376,6 +376,17 @@ backup_check() {
 wait_for_services() {
   start=$(date +%s)
   while :; do
+    if [ -n "$(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null || true)" ]; then
+      break
+    fi
+    now=$(date +%s)
+    if [ $((now - start)) -ge "$TIMEOUT" ]; then
+      echo "timeout waiting for stack services to appear; collecting partial results" >&2
+      return
+    fi
+    sleep 2
+  done
+  while :; do
     active=0
     for svc in $(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null || true); do
       states=$(docker_cmd service ps --no-trunc --format '{{.CurrentState}}' "$svc" 2>/dev/null || true)
@@ -396,6 +407,23 @@ wait_for_services() {
 service_error_status() {
   svc=$1
   err=$(docker_cmd service ps --no-trunc --format '{{.Error}}' "$svc" 2>/dev/null | sed '/^$/d' | sed -n '1p' | tr ' \t' '_' | tr -d '"' || true)
+  [ -n "$err" ] || err=no_result_log
+  case "$err" in
+    *requires_CS_GLUSTER_REMOTE*|*LiteFS*|*litefs*|*kopia*|*KOPIA*|*missing_sqlite3*|*requires_CS_KOPIA*)
+      printf 'BLOCKED\t%s' "$err"
+      ;;
+    *)
+      printf 'FAIL\t%s' "$err"
+      ;;
+  esac
+}
+
+service_error_status_for_node() {
+  svc=$1
+  node=$2
+  err=$(docker_cmd service ps --no-trunc --format '{{.Node}}\t{{.Error}}\t{{.CurrentState}}' "$svc" 2>/dev/null |
+    awk -F '\t' -v n="$node" '$1 == n {print $2 "\t" $3; exit}' |
+    sed -n '1p' | tr ' ' '_' | tr -d '"' || true)
   [ -n "$err" ] || err=no_result_log
   case "$err" in
     *requires_CS_GLUSTER_REMOTE*|*LiteFS*|*litefs*|*kopia*|*KOPIA*|*missing_sqlite3*|*requires_CS_KOPIA*)
@@ -538,6 +566,27 @@ fi
 
 for svc in $(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null | sort); do
   sid=${svc#${STACK}_}
+  meta=$(scenario_meta "$sid" 2>/dev/null || true)
+  if [ -n "$meta" ] && [ -n "$NODE_NAMES" ]; then
+    mode=$(meta_field "$meta" 2)
+    write=$(meta_field "$meta" 3)
+    engine=$(meta_field "$meta" 4)
+    crypt=$(meta_field "$meta" 5)
+    backup=$(meta_field "$meta" 6)
+    workload=$(meta_field "$meta" 7)
+    for node in $(printf '%s\n' "$NODE_NAMES" | tr ',' ' '); do
+      [ -n "$node" ] || continue
+      if awk -F '\t' -v s="$sid" -v n="$node" 'NR > 1 && $1 == s && $2 == n {found=1} END {exit found ? 0 : 1}' "$TSV"; then
+        continue
+      fi
+      se=$(service_error_status_for_node "$svc" "$node")
+      st=$(printf '%s' "$se" | awk -F '\t' '{print $1}')
+      note=$(printf '%s' "$se" | awk -F '\t' '{print $2}')
+      printf '%s\t%s\t%s\tcss_%s\t%s\t%s\t%s\t%s\t%s\t%s\tna\t%s\tna\tna\tna\tna\tmissing_node_result\tna\tna\tna\tSKIP:not_mounted\tSKIP:not_requested\t%s\t%s\n' \
+        "$sid" "$node" "$svc" "$sid" "$mode" "$write" "$engine" "$crypt" "$backup" "$workload" "${WRITER_NODE:-na}" "$st" "$note" >> "$TSV"
+    done
+    continue
+  fi
   if awk -F '\t' -v s="$sid" 'NR > 1 && $1 == s {found=1} END {exit found ? 0 : 1}' "$TSV"; then
     continue
   fi

@@ -182,6 +182,9 @@ func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 	if err := writeSecretFile(passfile, s.cfg.GocryptfsPassword); err != nil {
 		return err
 	}
+	if err := resetUnmountedMountpointDir(layout.Cache); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(layout.Cipher, 0o700); err != nil {
 		return err
 	}
@@ -210,6 +213,16 @@ func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 		return err
 	}
 	return nil
+}
+
+func resetUnmountedMountpointDir(path string) error {
+	if path == "" || isMountpointFunc(path) {
+		return nil
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+	return os.MkdirAll(path, 0o700)
 }
 
 func fields(v string) []string {

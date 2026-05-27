@@ -213,7 +213,7 @@ services:
       - -c
     command:
       - |
-        for v in \$$(docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}'); do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
+        docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}' | while read -r v; do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
         docker run --rm --privileged --pid host --network host -v /:/host alpine:3.20 chroot /host /bin/sh -c 'set -eu; for d in /mnt/cs_storage/vols/${STACK}_css_* /mnt/cs_storage/vols/css_preflight_*; do test -e "\$\$d" || continue; for sub in mount cache local/cipher remote gluster litefs-mount; do umount -lf "\$\$d/\$\$sub" >/dev/null 2>&1 || true; done; rm -rf "\$\$d"; done'
     volumes:
       - type: bind
@@ -262,6 +262,21 @@ tool_version() {
   command -v "$tool"
 }
 
+runtime_tool_version() {
+  env_key=$1
+  fallback=$2
+  shift 2
+  configured=$(read_env_value /etc/cs-storage/daemon.env "$env_key" 2>/dev/null || true)
+  for tool in "$configured" "$fallback" "$(basename "$fallback")"; do
+    [ -n "$tool" ] || continue
+    if note=$(tool_version "$tool" "$@"); then
+      printf '%s' "$note"
+      return 0
+    fi
+  done
+  return 1
+}
+
 run_preflight() {
   out_dir=$1
   mkdir -p "$out_dir"
@@ -283,12 +298,12 @@ run_preflight() {
     printf 'package\tcs-storage\tFAIL\tnot_installed_by_dpkg\n' >> "$pf"
   fi
 
-  if note=$(tool_version litefs version -version --version); then
+  if note=$(runtime_tool_version CS_LITEFS_BINARY /usr/lib/cs-storage/bin/litefs version -version --version); then
     printf 'runtime-tool\tlitefs\tPASS\t%s\n' "$note" >> "$pf"
   else
     printf 'runtime-tool\tlitefs\tFAIL\tmissing_from_host_path\n' >> "$pf"
   fi
-  if note=$(tool_version kopia --version version); then
+  if note=$(runtime_tool_version CS_KOPIA_BINARY /usr/lib/cs-storage/bin/kopia --version version); then
     printf 'runtime-tool\tkopia\tPASS\t%s\n' "$note" >> "$pf"
   else
     printf 'runtime-tool\tkopia\tFAIL\tmissing_from_host_path\n' >> "$pf"
