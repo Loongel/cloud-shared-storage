@@ -62,6 +62,23 @@ retry_download() {
   done
 }
 
+latest_from_redirect() {
+  set +e
+  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null)
+  rc=$?
+  set -e
+  if test "$rc" -ne 0; then
+    return "$rc"
+  fi
+  printf '%s\n' "$effective_url" | sed -n 's#.*/releases/tag/v\([^/?#]*\).*#\1#p' | sed -n '1p'
+}
+
+latest_from_api() {
+  retry_capture_url "$API_URL" |
+    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' |
+    sed -n '1p'
+}
+
 retry_run() {
   op=$1
   shift
@@ -104,20 +121,9 @@ if test -z "$installed"; then
   exit 0
 fi
 
-latest=$(
-  retry_capture_url "$API_URL" |
-    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' |
-    sed -n '1p'
-)
+latest=$(latest_from_redirect || true)
 if test -z "$latest"; then
-  set +e
-  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null)
-  rc=$?
-  set -e
-  if test "$rc" -ne 0; then
-    effective_url=""
-  fi
-  latest=$(printf '%s\n' "$effective_url" | sed -n 's#.*/releases/tag/v\([^/?#]*\).*#\1#p' | sed -n '1p')
+  latest=$(latest_from_api || true)
 fi
 if test -z "$latest"; then
   log "status=skip reason=latest_version_unavailable installed=$installed"
