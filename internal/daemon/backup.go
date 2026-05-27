@@ -79,7 +79,7 @@ func (s *Server) runKopiaSnapshot(ctx context.Context, meta volume.Metadata, w i
 func (s *Server) runKopia(ctx context.Context, args []string, w io.Writer) error {
 	binary := s.cfg.KopiaBinary
 	if binary == "" {
-		binary = "kopia"
+		binary = packagedBinary("kopia", "kopia")
 	}
 	cmdArgs := []string{}
 	if s.cfg.KopiaConfigPath != "" {

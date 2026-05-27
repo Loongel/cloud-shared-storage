@@ -76,7 +76,7 @@ func (s *Server) ensureLiteFS(meta volume.Metadata) error {
 	}
 	binary := s.cfg.LiteFSBinary
 	if binary == "" {
-		binary = "litefs"
+		binary = packagedBinary("litefs", "litefs")
 	}
 	configPath := s.cfg.LiteFSConfig
 	if configPath == "" {
@@ -271,7 +271,7 @@ func (s *Server) ensureLiteFSBackend(meta volume.Metadata) error {
 	}
 	binary := s.cfg.LiteFSBinary
 	if binary == "" {
-		binary = "litefs"
+		binary = packagedBinary("litefs", "litefs")
 	}
 	configPath := filepath.Join(layout.Config, "litefs-auto.yml")
 	if s.cfg.LiteFSConfig != "" {
