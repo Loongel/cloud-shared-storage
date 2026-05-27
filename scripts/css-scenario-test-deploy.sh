@@ -176,7 +176,8 @@ services:
       - -c
     command:
       - |
-        docker run --rm --privileged --pid host --network host -v /:/host alpine:3.20 chroot /host /bin/sh -c 'set -eu; for d in /mnt/cs_storage/vols/${STACK}_css_* /mnt/cs_storage/vols/css_preflight_*; do test -e "\$\$d" || continue; for sub in mount remote cipher gluster litefs-mount; do umount -lf "\$\$d/\$\$sub" >/dev/null 2>&1 || true; done; rm -rf "\$\$d"; done'
+        for v in \$(docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}'); do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
+        docker run --rm --privileged --pid host --network host -v /:/host alpine:3.20 chroot /host /bin/sh -c 'set -eu; for d in /mnt/cs_storage/vols/${STACK}_css_* /mnt/cs_storage/vols/css_preflight_*; do test -e "\$\$d" || continue; for sub in remote/cipher mount remote gluster litefs-mount; do umount -lf "\$\$d/\$\$sub" >/dev/null 2>&1 || true; done; rm -rf "\$\$d"; done'
     volumes:
       - type: bind
         source: /var/run/docker.sock
