@@ -11,6 +11,8 @@
 **文档版本：** v5.1 (Final Release)
 **核心架构：** 全栈 Golang / 零信任 C/S 架构 / 动态链路编排 / 内存级 FUSE 路由
 
+**关键修订注记：** 加密链路必须理解为 **rclone on gocryptfs 自动解密挂载层**，不是 rclone 读取物理密文目录。`cs.crypt=true` 只保护宿主机节点本地物理盘/cache；容器内、Docker volume 挂载点、rclone VFS/sync 输入都应是 gocryptfs 暴露出的自动解密明文视图。`local/cipher` 等密文目录只能由 gocryptfs 管理，严禁作为 rclone source、cache-dir 或 sync 源。WebDAV/S3 后端当前默认保存明文，后端加密以后必须用独立参数表达，不能由 `cs.crypt` 推断。
+
 ## 1. 系统概述与核心需求矩阵
 
 ### 1.1 业务背景与架构痛点
