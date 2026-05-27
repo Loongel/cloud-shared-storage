@@ -197,10 +197,7 @@ func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 			return fmt.Errorf("gocryptfs init failed: %w", err)
 		}
 	}
-	args := []string{"-passfile", passfile, layout.Cipher, layout.Cache}
-	if s.cfg.GocryptfsExtraArgs != "" {
-		args = append(fields(s.cfg.GocryptfsExtraArgs), args...)
-	}
+	args := gocryptfsMountArgs(passfile, layout.Cipher, layout.Cache, fields(s.cfg.GocryptfsExtraArgs))
 	if err := s.procs.Start(ProcessSpec{
 		Key:     "gocryptfs:" + meta.Name,
 		Binary:  binary,
@@ -214,6 +211,14 @@ func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 		return err
 	}
 	return nil
+}
+
+func gocryptfsMountArgs(passfile, cipherDir, mountpoint string, extra []string) []string {
+	args := []string{"-fg", "-passfile", passfile, cipherDir, mountpoint}
+	if len(extra) == 0 {
+		return args
+	}
+	return append(extra, args...)
 }
 
 func resetUnmountedMountpointDir(path string) error {
