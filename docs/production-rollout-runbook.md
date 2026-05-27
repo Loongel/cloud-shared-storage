@@ -75,7 +75,9 @@ The package also enables `cs-storage-auto-upgrade.timer`. It checks GitHub
 latest Release and installs a newer deb locally on the same host while
 preserving `/etc/cs-storage` configuration and secrets. It retries transient
 GitHub/download/apt failures and uses a local lock so overlapping timer runs do
-not compete. The active-development interval is `5s`.
+not compete. GitHub query and deb download calls have explicit curl timeouts,
+and the systemd oneshot has a bounded `TimeoutStartSec`. The
+active-development interval is `5s`.
 
 Do not perform package rollout through Docker Swarm global services or
 privileged helper containers. CSS package installation and upgrades must happen

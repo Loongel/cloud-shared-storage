@@ -10,6 +10,9 @@ CSS_RELEASE_API_URL=${CSS_RELEASE_API_URL:-https://api.github.com/repos/$CSS_GIT
 CSS_RELEASE_ASSET_BASE=${CSS_RELEASE_ASSET_BASE:-https://github.com/$CSS_GITHUB_OWNER/$CSS_GITHUB_REPO/releases/download}
 CSS_DEB_URL=${CSS_DEB_URL:-}
 CSS_INSTALLER_URL=${CSS_INSTALLER_URL:-$CSS_REPO_RAW/scripts/cs-storage-systemd-node-install.sh}
+CSS_HTTP_CONNECT_TIMEOUT=${CSS_HTTP_CONNECT_TIMEOUT:-10}
+CSS_HTTP_MAX_TIME=${CSS_HTTP_MAX_TIME:-300}
+CSS_HTTP_QUERY_MAX_TIME=${CSS_HTTP_QUERY_MAX_TIME:-30}
 
 ENV_DIR=${ENV_DIR:-/etc/cs-storage}
 SECRET_DIR=${SECRET_DIR:-$ENV_DIR/secrets}
@@ -124,9 +127,9 @@ download_file() {
   url=$1
   dst=$2
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$dst"
+    curl -fsSL --connect-timeout "$CSS_HTTP_CONNECT_TIMEOUT" --max-time "$CSS_HTTP_MAX_TIME" "$url" -o "$dst"
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$dst" "$url"
+    wget -T "$CSS_HTTP_CONNECT_TIMEOUT" -qO "$dst" "$url"
   else
     die "missing curl or wget"
   fi
@@ -135,9 +138,9 @@ download_file() {
 fetch_url() {
   url=$1
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url"
+    curl -fsSL --connect-timeout "$CSS_HTTP_CONNECT_TIMEOUT" --max-time "$CSS_HTTP_QUERY_MAX_TIME" "$url"
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO - "$url"
+    wget -T "$CSS_HTTP_CONNECT_TIMEOUT" -qO - "$url"
   else
     die "missing curl or wget"
   fi
@@ -145,7 +148,7 @@ fetch_url() {
 
 latest_release_version() {
   if command -v curl >/dev/null 2>&1; then
-    effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$CSS_RELEASE_LATEST_URL" 2>/dev/null || true)
+    effective_url=$(curl -fsSL --connect-timeout "$CSS_HTTP_CONNECT_TIMEOUT" --max-time "$CSS_HTTP_QUERY_MAX_TIME" -o /dev/null -w '%{url_effective}' "$CSS_RELEASE_LATEST_URL" 2>/dev/null || true)
     version=$(printf '%s\n' "$effective_url" | sed -n 's#.*/releases/tag/v\([^/?#]*\).*#\1#p' | sed -n '1p')
     if test -n "$version"; then
       printf '%s\n' "$version"

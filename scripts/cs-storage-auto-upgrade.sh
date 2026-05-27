@@ -10,6 +10,10 @@ LOCK_DIR=${CSS_UPGRADE_LOCK_DIR:-/run/cs-storage-upgrade.lock}
 LOG_PREFIX=CSS_AUTO_UPGRADE
 RETRY_ATTEMPTS=${CSS_UPGRADE_RETRY_ATTEMPTS:-5}
 RETRY_DELAY=${CSS_UPGRADE_RETRY_DELAY:-5}
+QUERY_CONNECT_TIMEOUT=${CSS_UPGRADE_QUERY_CONNECT_TIMEOUT:-5}
+QUERY_MAX_TIME=${CSS_UPGRADE_QUERY_MAX_TIME:-20}
+DOWNLOAD_CONNECT_TIMEOUT=${CSS_UPGRADE_DOWNLOAD_CONNECT_TIMEOUT:-10}
+DOWNLOAD_MAX_TIME=${CSS_UPGRADE_DOWNLOAD_MAX_TIME:-120}
 tmp=
 
 log() {
@@ -25,7 +29,7 @@ retry_capture_url() {
   i=1
   while :; do
     set +e
-    out=$(curl -fsSL "$url" 2>/dev/null)
+    out=$(curl -fsSL --connect-timeout "$QUERY_CONNECT_TIMEOUT" --max-time "$QUERY_MAX_TIME" "$url" 2>/dev/null)
     rc=$?
     set -e
     if test "$rc" -eq 0; then
@@ -47,7 +51,7 @@ retry_download() {
   i=1
   while :; do
     set +e
-    curl -fsSL "$url" -o "$dest"
+    curl -fsSL --connect-timeout "$DOWNLOAD_CONNECT_TIMEOUT" --max-time "$DOWNLOAD_MAX_TIME" "$url" -o "$dest"
     rc=$?
     set -e
     if test "$rc" -eq 0; then
@@ -64,7 +68,7 @@ retry_download() {
 
 latest_from_redirect() {
   set +e
-  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null)
+  effective_url=$(curl -fsSL --connect-timeout "$QUERY_CONNECT_TIMEOUT" --max-time "$QUERY_MAX_TIME" -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null)
   rc=$?
   set -e
   if test "$rc" -ne 0; then

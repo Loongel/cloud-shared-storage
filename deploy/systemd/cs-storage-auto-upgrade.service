@@ -8,3 +8,4 @@ Type=oneshot
 ExecStart=/usr/lib/cs-storage/sbin/cs-storage-auto-upgrade
 User=root
 Group=root
+TimeoutStartSec=900s

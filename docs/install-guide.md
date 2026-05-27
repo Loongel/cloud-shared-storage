@@ -212,6 +212,9 @@ Release, downloads a newer `cs-storage_<version>_amd64.deb`, verifies the
 host-local only: it does not call Docker, does not create Swarm services, and
 does not mutate other nodes. Network downloads and apt/dpkg install attempts
 are retried with `CSS_UPGRADE_RETRY_ATTEMPTS` and `CSS_UPGRADE_RETRY_DELAY`;
+GitHub latest queries and deb downloads are bounded by
+`CSS_UPGRADE_QUERY_CONNECT_TIMEOUT`, `CSS_UPGRADE_QUERY_MAX_TIME`,
+`CSS_UPGRADE_DOWNLOAD_CONNECT_TIMEOUT`, and `CSS_UPGRADE_DOWNLOAD_MAX_TIME`;
 concurrent runs are skipped through `/run/cs-storage-upgrade.lock`.
 `/etc/cs-storage` config and secrets are preserved. During active delivery
 testing the timer interval is `5s`.
