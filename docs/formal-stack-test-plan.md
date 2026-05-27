@@ -3,7 +3,9 @@
 This plan drives CSS from "installed system services" to delivery-ready
 validation through Docker Swarm Stack workloads. The Stack tests application
 volumes through the host `css` Docker VolumeDriver. It must not run the CSS
-server, daemon, or plugin as workload containers.
+server, daemon, or plugin as workload containers, and it must not install deb
+packages, copy host runtime binaries, or restart host CSS services through
+Swarm helper containers.
 
 ## Goals
 
@@ -24,6 +26,9 @@ storage pipeline with a different easier-to-test model.
 Architecture invariants:
 
 - CSS server and client components are host systemd services.
+- Package installation, package upgrade, dependency ownership, and host service
+  restarts are local deb/apt/systemd operations on each node. Swarm/Stack is
+  only the post-install workload validation harness.
 - The Docker VolumeDriver plugin is a thin proxy only; it must not run FUSE,
   rclone, GlusterFS, LiteFS, or backup processes.
 - GlusterFS and LiteFS are production runtime components of CSS, not ad hoc

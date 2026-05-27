@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
 
@@ -46,5 +47,28 @@ func TestAuthClientSendsNamespace(t *testing.T) {
 
 	if _, err := (AuthClient{ServerURL: srv.URL, NodeID: "node-a", Secret: "secret", Namespace: "shared"}).Token(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAuthClientRetriesTransientFailures(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) < 3 {
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"token": "jwt-token"})
+	}))
+	defer srv.Close()
+
+	tok, err := (AuthClient{ServerURL: srv.URL, NodeID: "node-a", Secret: "secret"}).Token(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.Value != "jwt-token" {
+		t.Fatalf("unexpected token: %#v", tok)
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("expected 3 auth attempts, got %d", calls.Load())
 	}
 }

@@ -196,6 +196,12 @@ func (m *ProcessManager) IsRunning(key string) bool {
 	return cmd != nil && cmd.Process != nil && cmd.ProcessState == nil
 }
 
+func (m *ProcessManager) IsDesired(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.desired[key]
+}
+
 func (m *ProcessManager) Stop(key string) error {
 	m.mu.Lock()
 	cmd := m.procs[key]

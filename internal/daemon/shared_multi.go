@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"cs-storage/internal/volume"
 )
@@ -22,7 +21,7 @@ func (s *Server) ensureMountReady(_ string, meta volume.Metadata) error {
 	if err := s.ensureSharedMulti(meta); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultMountReadyTimeout)
 	defer cancel()
 	return s.ensurePeriodicSync(ctx, meta)
 }
@@ -63,7 +62,7 @@ func (s *Server) ensureGluster(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if !waitForMountpoint(layout.Mountpoint, 10*time.Second) {
+	if !waitForMountpoint(layout.Mountpoint, defaultMountReadyTimeout) {
 		return fmt.Errorf("gluster mount did not become ready at %s", layout.Mountpoint)
 	}
 	return nil
@@ -96,7 +95,7 @@ func (s *Server) ensureLiteFS(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "litefs:"+meta.Name, layout.Mountpoint, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "litefs:"+meta.Name, layout.Mountpoint, defaultMountReadyTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -230,7 +229,7 @@ func (s *Server) ensureAutoRouter(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "router:"+meta.Name, layout.Mountpoint, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "router:"+meta.Name, layout.Mountpoint, defaultMountReadyTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -258,7 +257,7 @@ func (s *Server) ensureGlusterBackend(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if !waitForMountpoint(layout.Gluster, 10*time.Second) {
+	if !waitForMountpoint(layout.Gluster, defaultMountReadyTimeout) {
 		return fmt.Errorf("gluster backend mount did not become ready at %s", layout.Gluster)
 	}
 	return nil
@@ -293,7 +292,7 @@ func (s *Server) ensureLiteFSBackend(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "litefs-backend:"+meta.Name, layout.LiteFSMount, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "litefs-backend:"+meta.Name, layout.LiteFSMount, defaultMountReadyTimeout); err != nil {
 		return err
 	}
 	return nil

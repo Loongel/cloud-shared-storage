@@ -7,6 +7,7 @@ PROFILE=${CSS_TEST_PROFILE:-full}
 NODE_NAMES=${CSS_TEST_NODE_NAMES:-}
 WRITER_NODE=${CSS_TEST_WRITER_NODE:-}
 TIMEOUT=${CSS_TEST_TIMEOUT:-240}
+LOG_SETTLE_TIMEOUT=${CSS_TEST_LOG_SETTLE_TIMEOUT:-120}
 OUT_DIR=${OUT_DIR:-}
 CHECK_BACKEND=1
 RUN_CONTROLS=1
@@ -399,6 +400,16 @@ wait_for_services() {
       '; then
         active=1
       fi
+      if [ -n "$NODE_NAMES" ]; then
+        task_nodes=$(docker_cmd service ps --no-trunc --format '{{.Node}}' "$svc" 2>/dev/null || true)
+        for expected_node in $(printf '%s\n' "$NODE_NAMES" | tr ',' ' '); do
+          [ -n "$expected_node" ] || continue
+          if ! printf '%s\n' "$task_nodes" | grep -Fx "$expected_node" >/dev/null 2>&1; then
+            active=1
+            break
+          fi
+        done
+      fi
     done
     [ "$active" = "0" ] && break
     now=$(date +%s)
@@ -407,6 +418,38 @@ wait_for_services() {
       break
     fi
     sleep 3
+  done
+}
+
+expected_result_count() {
+  [ -n "$NODE_NAMES" ] || { echo 0; return; }
+  svc_count=$(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null | wc -l | tr -d ' ')
+  node_count=$(printf '%s\n' "$NODE_NAMES" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' ')
+  echo $((svc_count * node_count))
+}
+
+collect_service_logs() {
+  logs=$1
+  : > "$logs"
+  for svc in $(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null | sort); do
+    docker_cmd service logs --raw "$svc" 2>/dev/null >> "$logs" || true
+  done
+}
+
+wait_for_result_logs() {
+  logs=$1
+  expected=$(expected_result_count)
+  [ "$expected" -gt 0 ] || return
+  deadline=$(( $(date +%s) + LOG_SETTLE_TIMEOUT ))
+  while :; do
+    collect_service_logs "$logs"
+    count=$(grep -c "CSS_SCENARIO_RESULT run_id=$RUN_ID " "$logs" 2>/dev/null || true)
+    [ "$count" -ge "$expected" ] && return
+    [ "$(date +%s)" -ge "$deadline" ] && {
+      echo "timeout waiting for service logs; expected=$expected got=$count" >&2
+      return
+    }
+    sleep 2
   done
 }
 
@@ -530,9 +573,7 @@ fi
 
 printf 'scenario\tnode\tservice\tvolume\tmode\twrite\tengine\tcrypt\tbackup\tworkload\trole\twriter_node\texpected_visible\tactual_visible\tmissing\tunexpected\toperations\town_sha\tsqlite_integrity\tsqlite_rows\tbackend\tbackup_check\tstatus\tnotes\n' > "$TSV"
 
-for svc in $(docker_cmd stack services --format '{{.Name}}' "$STACK" 2>/dev/null | sort); do
-  docker_cmd service logs --raw "$svc" 2>/dev/null >> "$LOGS" || true
-done
+wait_for_result_logs "$LOGS"
 
 if grep -q 'CSS_SCENARIO_RESULT' "$LOGS"; then
   grep 'CSS_SCENARIO_RESULT' "$LOGS" | while IFS= read -r line; do

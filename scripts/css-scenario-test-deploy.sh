@@ -118,8 +118,10 @@ docker_cmd() {
 docker_cmd_retry() {
   i=1
   while :; do
+    set +e
     out=$(docker_cmd "$@" 2>&1)
     rc=$?
+    set -e
     if [ "$rc" -eq 0 ]; then
       printf '%s' "$out"
       return 0

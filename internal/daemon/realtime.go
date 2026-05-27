@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"cs-storage/internal/volume"
 )
@@ -88,7 +87,7 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "rclone:"+meta.Name, layout.Mountpoint, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "rclone:"+meta.Name, layout.Mountpoint, defaultMountReadyTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -207,7 +206,7 @@ func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "gocryptfs:"+meta.Name, layout.Cache, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "gocryptfs:"+meta.Name, layout.Cache, defaultMountReadyTimeout); err != nil {
 		return err
 	}
 	return nil

@@ -1,6 +1,26 @@
 #!/bin/sh
 set -eu
 
+cat >&2 <<'EOF'
+CSS_CLUSTER_DEPS_ROLLOUT_REMOVED
+
+This historical helper is intentionally disabled.
+
+Do not use Docker Swarm services or helper containers to install host
+dependencies or mutate host files across nodes. CSS production dependencies and
+runtime tools are owned by the cs-storage deb package on each node, upgraded
+locally by apt/systemd through cs-storage-auto-upgrade.timer.
+
+Use one of the role installers locally on each node, or let the deb-managed
+auto-upgrade service pull the GitHub Release package:
+
+  sudo systemctl enable --now cs-storage-auto-upgrade.timer
+  sudo systemctl start cs-storage-auto-upgrade.service
+
+Swarm/Stack is reserved for post-install workload validation only.
+EOF
+exit 2
+
 STACK=${STACK:-cs-storage-cluster-deps-rollout}
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 SMOKE=${SMOKE:-/tmp/cs-cluster-deps-rollout}

@@ -1,6 +1,23 @@
 #!/bin/sh
 set -eu
 
+cat >&2 <<'EOF'
+CSS_HD01_PRODUCTION_INSTALL_REMOVED
+
+This historical all-in-one hd01 installer is intentionally disabled because it
+can use Swarm helper paths to mutate hosts.
+
+Production installation is now done only by the role-specific local installers:
+
+  css-install-server.sh
+  css-install-client.sh
+  css-install-all.sh
+
+or by the deb-managed local auto-upgrade timer on each node. Stack/Swarm is
+reserved for post-install workload validation.
+EOF
+exit 2
+
 IMAGE=${IMAGE:-cs-storage:hd01-smoke}
 GO_IMAGE=${GO_IMAGE:-golang:1.22-bookworm}
 PROBE_IMAGE=${PROBE_IMAGE:-alpine:3.20}

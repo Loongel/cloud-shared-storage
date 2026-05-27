@@ -203,10 +203,21 @@ layouts. It does not remove `/usr/local/bin` or unrelated local files.
 
 The deb installs `cs-storage-auto-upgrade.timer`. It checks the GitHub latest
 Release, downloads a newer `cs-storage_<version>_amd64.deb`, verifies the
-`.sha256` asset when present, installs it non-interactively, and restarts only
-CSS services that were active before the upgrade. `/etc/cs-storage` config and
-secrets are preserved. During active delivery testing the timer interval is
-`5s`; before final long-term delivery change `OnUnitActiveSec` to `1min`.
+`.sha256` asset when present, and installs it non-interactively. The script is
+host-local only: it does not call Docker, does not create Swarm services, and
+does not mutate other nodes. Network downloads and apt/dpkg install attempts
+are retried with `CSS_UPGRADE_RETRY_ATTEMPTS` and `CSS_UPGRADE_RETRY_DELAY`;
+concurrent runs are skipped through `/run/cs-storage-upgrade.lock`.
+`/etc/cs-storage` config and secrets are preserved. During active delivery
+testing the timer interval is `5s`; before final long-term delivery change
+`OnUnitActiveSec` to `1min`.
+
+Do not use Docker Swarm services, Stack workloads, or helper containers to
+install or upgrade CSS host packages across nodes. Package installation is a
+local host operation handled by apt/systemd on each node. Using Swarm to mutate
+the hosts can disturb the same Swarm manager, gossip, and overlay paths that
+the scenario tests are intended to validate. The Stack scenario harness is only
+for post-install workload verification.
 
 ## Encryption Pipeline
 

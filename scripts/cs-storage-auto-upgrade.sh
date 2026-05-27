@@ -8,10 +8,79 @@ LATEST_URL=${CSS_UPGRADE_LATEST_URL:-https://github.com/$OWNER/$REPO/releases/la
 ASSET_BASE=${CSS_UPGRADE_ASSET_BASE:-https://github.com/$OWNER/$REPO/releases/download}
 LOCK_DIR=${CSS_UPGRADE_LOCK_DIR:-/run/cs-storage-upgrade.lock}
 LOG_PREFIX=CSS_AUTO_UPGRADE
+RETRY_ATTEMPTS=${CSS_UPGRADE_RETRY_ATTEMPTS:-5}
+RETRY_DELAY=${CSS_UPGRADE_RETRY_DELAY:-5}
 tmp=
 
 log() {
   echo "$LOG_PREFIX $*"
+}
+
+retry_sleep() {
+  sleep "$RETRY_DELAY"
+}
+
+retry_capture_url() {
+  url=$1
+  i=1
+  while :; do
+    set +e
+    out=$(curl -fsSL "$url" 2>/dev/null)
+    rc=$?
+    set -e
+    if test "$rc" -eq 0; then
+      printf '%s' "$out"
+      return 0
+    fi
+    if test "$i" -ge "$RETRY_ATTEMPTS"; then
+      return "$rc"
+    fi
+    log "status=retry op=curl_capture attempt=$i rc=$rc url=$url" >&2
+    i=$((i + 1))
+    retry_sleep
+  done
+}
+
+retry_download() {
+  url=$1
+  dest=$2
+  i=1
+  while :; do
+    set +e
+    curl -fsSL "$url" -o "$dest"
+    rc=$?
+    set -e
+    if test "$rc" -eq 0; then
+      return 0
+    fi
+    if test "$i" -ge "$RETRY_ATTEMPTS"; then
+      return "$rc"
+    fi
+    log "status=retry op=curl_download attempt=$i rc=$rc url=$url" >&2
+    i=$((i + 1))
+    retry_sleep
+  done
+}
+
+retry_run() {
+  op=$1
+  shift
+  i=1
+  while :; do
+    set +e
+    "$@"
+    rc=$?
+    set -e
+    if test "$rc" -eq 0; then
+      return 0
+    fi
+    if test "$i" -ge "$RETRY_ATTEMPTS"; then
+      return "$rc"
+    fi
+    log "status=retry op=$op attempt=$i rc=$rc" >&2
+    i=$((i + 1))
+    retry_sleep
+  done
 }
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -36,12 +105,18 @@ if test -z "$installed"; then
 fi
 
 latest=$(
-  curl -fsSL "$API_URL" 2>/dev/null |
+  retry_capture_url "$API_URL" |
     sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' |
     sed -n '1p'
 )
 if test -z "$latest"; then
-  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null || true)
+  set +e
+  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$LATEST_URL" 2>/dev/null)
+  rc=$?
+  set -e
+  if test "$rc" -ne 0; then
+    effective_url=""
+  fi
   latest=$(printf '%s\n' "$effective_url" | sed -n 's#.*/releases/tag/v\([^/?#]*\).*#\1#p' | sed -n '1p')
 fi
 if test -z "$latest"; then
@@ -60,17 +135,10 @@ sumfile="$deb.sha256"
 url="$ASSET_BASE/v$latest/cs-storage_${latest}_amd64.deb"
 sumurl="$url.sha256"
 
-curl -fsSL "$url" -o "$deb"
-if curl -fsSL "$sumurl" -o "$sumfile" 2>/dev/null; then
+retry_download "$url" "$deb"
+if retry_download "$sumurl" "$sumfile" 2>/dev/null; then
   (cd "$tmp" && sha256sum -c "$(basename "$sumfile")")
 fi
-
-active_services=
-for svc in cs-storage-server.service cs-storage-daemon.service cs-storage-plugin.service; do
-  if systemctl is-active --quiet "$svc" 2>/dev/null; then
-    active_services="$active_services $svc"
-  fi
-done
 
 export DEBIAN_FRONTEND=noninteractive
 export DEBIAN_PRIORITY=critical
@@ -80,14 +148,9 @@ export LANGUAGE=C
 export NEEDRESTART_MODE=a
 
 if command -v apt-get >/dev/null 2>&1; then
-  apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y "$deb"
+  retry_run apt_install apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y "$deb"
 else
-  dpkg -i "$deb"
-fi
-
-if test -n "$active_services"; then
-  # shellcheck disable=SC2086
-  systemctl try-restart $active_services
+  retry_run dpkg_install dpkg -i "$deb"
 fi
 
 log "status=ok action=upgraded from=$installed to=$latest"

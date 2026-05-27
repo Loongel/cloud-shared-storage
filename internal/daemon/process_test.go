@@ -163,6 +163,41 @@ func TestWaitForManagedMountpointReportsEarlyExit(t *testing.T) {
 	}
 }
 
+func TestWaitForManagedMountpointWaitsForDesiredRestart(t *testing.T) {
+	counter := filepath.Join(t.TempDir(), "counter")
+	mountpoint := filepath.Join(t.TempDir(), "mnt")
+	body := strings.ReplaceAll(`#!/bin/sh
+set -eu
+n=0
+if [ -f "__COUNTER__" ]; then n=$(cat "__COUNTER__"); fi
+n=$((n + 1))
+echo "$n" > "__COUNTER__"
+if [ "$n" -lt 2 ]; then exit 1; fi
+mkdir -p "__MOUNTPOINT__"
+sleep 2
+`, "__COUNTER__", counter)
+	body = strings.ReplaceAll(body, "__MOUNTPOINT__", mountpoint)
+	bin := writeScript(t, "restart.sh", body)
+	oldIsMountpoint := isMountpointFunc
+	isMountpointFunc = func(path string) bool {
+		if path != mountpoint {
+			return false
+		}
+		_, err := os.Stat(mountpoint)
+		return err == nil
+	}
+	t.Cleanup(func() { isMountpointFunc = oldIsMountpoint })
+
+	m := NewProcessManager()
+	if err := m.Start(ProcessSpec{Key: "restart", Binary: bin, Restart: true, RestartDelay: 10 * time.Millisecond}); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitForManagedMountpoint(m, "restart", mountpoint, time.Second); err != nil {
+		t.Fatalf("expected restart to become ready, got %v", err)
+	}
+	_ = m.Stop("restart")
+}
+
 func writeScript(t *testing.T, name string, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

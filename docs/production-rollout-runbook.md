@@ -7,7 +7,7 @@ This runbook is derived from `技术方案.v0.txt`, `技术方案.v1.txt`, and t
 - Do not compile or test locally. Build, test, deploy, and Swarm validation happen on hd01.
 - Do not run live destructive network tests on hd01: no node drain/offline, firewall/route changes, `tc/netem`, Docker network disconnect, split-brain induction, or forced network partitions.
 - Do not write WebDAV, SSH, JWT, Kopia, gocryptfs, or backend credentials into git-tracked files.
-- Host dependency rollout changes all Ready Swarm nodes. It requires explicit operator approval before running `APPLY=1 ACK_INSTALL_HOST_DEPS=yes`.
+- Do not use Docker Swarm, Stack services, or privileged helper containers to install packages, upgrade packages, restart host services, or copy runtime tools across nodes. Host mutation is local deb/apt/systemd only.
 
 ## Connection Note
 
@@ -72,9 +72,17 @@ the stacks and volumes first; use `sudo env CSS_STORAGE_PURGE_FORCE=1 apt-get
 purge -y cs-storage` only for emergency cleanup.
 
 The package also enables `cs-storage-auto-upgrade.timer`. It checks GitHub
-latest Release and installs a newer deb while preserving `/etc/cs-storage`
-configuration and secrets. The active-development interval is `5s`; final
-long-term delivery should use `1min`.
+latest Release and installs a newer deb locally on the same host while
+preserving `/etc/cs-storage` configuration and secrets. It retries transient
+GitHub/download/apt failures and uses a local lock so overlapping timer runs do
+not compete. The active-development interval is `5s`; final long-term delivery
+should use `1min`.
+
+Do not perform package rollout through Docker Swarm global services or
+privileged helper containers. CSS package installation and upgrades must happen
+locally on each host through the role installer or the deb-managed systemd
+auto-upgrade timer. Swarm/Stack is reserved for workload validation after the
+host services are already installed.
 
 Server only:
 
@@ -132,7 +140,7 @@ sh /tmp/cs-storage-install.sh \
   --enable-now
 ```
 
-Use `--role server` or `--role client` for split server/client deployments. Set `--backend-auth-header-file` instead of the backend user/password pair when that is the backend auth model. The historical `scripts/hd01-production-install.sh` and Swarm launcher smokes remain as validation and migration aids, but they are not the formal production runtime.
+Use `--role server` or `--role client` for split server/client deployments. Set `--backend-auth-header-file` instead of the backend user/password pair when that is the backend auth model. The historical `scripts/hd01-production-install.sh` is disabled because it can use Swarm host-mutation paths; Swarm launcher smokes are historical evidence only, not the formal production runtime.
 
 Secret rules:
 
@@ -151,7 +159,7 @@ From `/tmp/cs-storage-work-current` on hd01:
 For scripts that build helper binaries from source, either keep `/tmp/cs-storage-work-current` refreshed to the current source or pass `WORKDIR=/tmp/cs-storage-work-<timestamp>` explicitly. The smoke scripts now default to `/tmp/cs-storage-work-current` instead of the older `/tmp/cs-storage-work` path.
 
 ```sh
-sh -n scripts/hd01-cluster-preflight.sh   scripts/hd01-cluster-deps-rollout.sh   scripts/hd01-production-secrets-preflight.sh   scripts/hd01-acceptance-audit.sh
+sh -n scripts/hd01-cluster-preflight.sh scripts/hd01-production-secrets-preflight.sh scripts/hd01-acceptance-audit.sh
 ```
 
 ```sh
@@ -164,32 +172,8 @@ Expected current state after dependency rollout:
 CLUSTER_PREFLIGHT_OK logged_nodes=4 nodes=4 ready=4 image=alpine:3.20
 ```
 
-The guarded host dependency rollout remains dry-run by default for future reinstalls:
-
-```sh
-PREFLIGHT_SMOKE=/tmp/cs-cluster-preflight-collector ./scripts/hd01-cluster-deps-rollout.sh
-```
-
-Expected safe dry-run:
-
-```text
-CLUSTER_DEPS_ROLLOUT_DRY_RUN image=cs-storage:hd01-smoke ready=4 min=4
-```
-
 If `docker build` fails inside the build container with `Temporary failure resolving 'deb.debian.org'`, rebuild on hd01 with `docker build --network host -t cs-storage:hd01-smoke .`; this uses host networking only for the build container and does not change host network configuration.
 When Docker service logs are partial on hd01, the Swarm smoke scripts also check task state. `IMAGE_LOAD_LOGS_PARTIAL`, `DAEMON_GLOBAL_LOGS_PARTIAL`, and `PLUGIN_DAEMON_GLOBAL_LOGS_PARTIAL` are acceptable only when all required tasks are Running or Complete and the script still emits the corresponding `*_SMOKE_OK` token.
-
-Verify the apply gate refuses missing acknowledgement:
-
-```sh
-APPLY=1 ./scripts/hd01-cluster-deps-rollout.sh
-```
-
-Expected refusal:
-
-```text
-CLUSTER_DEPS_REFUSE_APPLY missing_ack=ACK_INSTALL_HOST_DEPS=yes
-```
 
 Run the read-only production secrets/backend preflight after SSH and Docker are stable:
 
@@ -217,27 +201,15 @@ PRODUCTION_SECRETS_BOOTSTRAP_DRY_RUN
 
 Apply mode without `ACK_WRITE_PRODUCTION_SECRETS=yes` must refuse with `PRODUCTION_SECRETS_BOOTSTRAP_REFUSE_APPLY missing_ack=ACK_WRITE_PRODUCTION_SECRETS=yes`; this refusal was verified on hd01 and does not write `/etc/cs-storage`. In apply mode, the helper writes env files that reference file-backed secrets under `/run/cs-storage-secrets/*` and writes the host-side secret files under `/etc/cs-storage/secrets/*` with mode `0600`. The non-production smoke `scripts/hd01-production-secrets-bootstrap-smoke.sh` runs the same apply path against temporary `/tmp/cs-storage-production-secrets-bootstrap-smoke-env-*` directories across all Ready nodes, verifies strict preflight and `KEY_FILE_OK`, then removes the temporary tree; hd01 verified `PRODUCTION_SECRETS_BOOTSTRAP_FILE_SECRET_SMOKE_OK`.
 
-## Host Dependency Rollout
+## Host Dependency Ownership
 
-Only after explicit operator approval:
+Host dependencies and runtime tools are owned by the `cs-storage` deb package
+on each node. Do not copy LiteFS/Kopia to `/usr/local/bin` through Swarm helper
+containers and do not run the disabled `scripts/hd01-cluster-deps-rollout.sh`.
+The supported paths are the role installers and the local
+`cs-storage-auto-upgrade.timer`.
 
-```sh
-APPLY=1 ACK_INSTALL_HOST_DEPS=yes   PREFLIGHT_SMOKE=/tmp/cs-cluster-preflight-collector   ./scripts/hd01-cluster-deps-rollout.sh
-```
-
-It installs apt-managed host tools on every Ready node:
-
-```text
-glusterfs-client sqlite3 rclone gocryptfs fuse3
-```
-
-It copies runtime binaries from `cs-storage:hd01-smoke` to `/usr/local/bin` on each node:
-
-```text
-litefs kopia
-```
-
-After rollout, re-run:
+After local install or local auto-upgrade, re-run:
 
 ```sh
 SMOKE=/tmp/cs-cluster-preflight-after-deps STRICT=1 ./scripts/hd01-cluster-preflight.sh
@@ -249,7 +221,7 @@ Acceptance requires no missing tools and all Ready nodes logged.
 
 Create real env files outside git on every node or through a secure operator flow. Do not commit values.
 Use file mode `0600` for writable root-owned env files, or `0400` for read-only root-owned env files; the production preflight marks group/world-readable or writable modes as insecure.
-`server.env` and `daemon.env` must use the same node secret, either directly through `CS_NODE_SECRET_KEY` or preferably through `CS_NODE_SECRET_KEY_FILE`. Backend auth must be present through either `CS_BACKEND_AUTH_HEADER(_FILE)` or both `CS_BACKEND_USER(_FILE)` and `CS_BACKEND_PASSWORD(_FILE)`. The preflight reports mismatches without printing secret values. To create the three env files plus `/etc/cs-storage/secrets/*` on every Ready Swarm node through a temporary global helper, pass the same variables shown above and explicitly acknowledge the write:
+`server.env` and `daemon.env` must use the same node secret, either directly through `CS_NODE_SECRET_KEY` or preferably through `CS_NODE_SECRET_KEY_FILE`. Backend auth must be present through either `CS_BACKEND_AUTH_HEADER(_FILE)` or both `CS_BACKEND_USER(_FILE)` and `CS_BACKEND_PASSWORD(_FILE)`. The preflight reports mismatches without printing secret values. Prefer the role installers for writing these files locally on each node. The historical bootstrap helper is retained only for isolated lab migration work and must not be used for production cross-node host mutation:
 
 ```sh
 APPLY=1 ACK_WRITE_PRODUCTION_SECRETS=yes \

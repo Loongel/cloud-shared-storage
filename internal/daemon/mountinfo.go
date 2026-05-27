@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const defaultMountReadyTimeout = 60 * time.Second
+
 func waitForMountpoint(path string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -25,6 +27,10 @@ func waitForManagedMountpoint(procs *ProcessManager, key string, path string, ti
 			return nil
 		}
 		if procs != nil && !procs.IsRunning(key) {
+			if procs.IsDesired(key) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 			return fmt.Errorf("%s exited before mount became ready at %s", key, path)
 		}
 		time.Sleep(100 * time.Millisecond)
