@@ -193,14 +193,14 @@ Formal production deployment uses host systemd services, not long-running CS-Sto
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.18
+./scripts/cs-storage-build-deb.sh --version 0.1.19
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.18
-git push origin main v0.1.18
+git tag v0.1.19
+git push origin main v0.1.19
 ```
 
 For normal installs, use the role-specific one-command wrappers.
@@ -252,7 +252,7 @@ The lower-level installer remains available for advanced automation:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.18/cs-storage_0.1.18_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.19/cs-storage_0.1.19_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \

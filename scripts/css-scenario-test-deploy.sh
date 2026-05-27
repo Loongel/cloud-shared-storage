@@ -213,7 +213,7 @@ services:
       - -c
     command:
       - |
-        for v in \$(docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}'); do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
+        for v in \$$(docker volume ls --format '{{.Name}}' | awk '/^${STACK}_css_/ || /^css_preflight_/ {print}'); do docker volume rm "\$\$v" >/dev/null 2>&1 || true; done
         docker run --rm --privileged --pid host --network host -v /:/host alpine:3.20 chroot /host /bin/sh -c 'set -eu; for d in /mnt/cs_storage/vols/${STACK}_css_* /mnt/cs_storage/vols/css_preflight_*; do test -e "\$\$d" || continue; for sub in mount cache local/cipher remote gluster litefs-mount; do umount -lf "\$\$d/\$\$sub" >/dev/null 2>&1 || true; done; rm -rf "\$\$d"; done'
     volumes:
       - type: bind
@@ -423,6 +423,7 @@ done
 NODE_NAMES=$(
   for node in $NODES; do
     docker_cmd_retry node inspect --format '{{.Description.Hostname}}' "$node"
+    printf '\n'
   done | sort | tr '\n' ',' | sed 's/,$//'
 )
 WRITER_NODE=$(printf '%s\n' "$NODE_NAMES" | tr ',' '\n' | sed '/^$/d' | sort | sed -n '1p')
