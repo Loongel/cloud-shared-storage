@@ -58,7 +58,9 @@ Effective pipeline semantics:
   node-local physical/cache storage before it lands on the host disk. In the
   default remote mode rclone reads plaintext from the mounted view and writes
   plaintext to WebDAV/S3. Backend encryption is a future separate option and
-  must not be inferred from `cs.crypt`.
+  must not be inferred from `cs.crypt`. The exact implementation invariant is
+  rclone on the gocryptfs auto-decrypted mount/cache view, never rclone on the
+  physical cipher directory.
 - `cs.backup=true`: Kopia must snapshot and restore the mounted plaintext view.
 
 ## Full Valid Matrix

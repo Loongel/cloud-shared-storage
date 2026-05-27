@@ -292,9 +292,10 @@ private/shared-single volumes, rclone receives plaintext and writes plaintext
 to the S-side/WebDAV backend by default, while its local VFS cache is backed by
 gocryptfs so host disk state is encrypted. The invariant is: rclone is placed
 on the gocryptfs auto-decrypted mount/cache view, never on the physical cipher
-directory. For shared-multi volumes, rclone sync reads the plaintext mounted
-view; backend encryption is a separate future remote option, not the meaning of
-`cs.crypt`.
+directory. This is the required "rclone on gocryptfs decrypted view" pipeline,
+not "rclone on encrypted physical storage". For shared-multi volumes, rclone
+sync reads the plaintext mounted view after GlusterFS/LiteFS/router; backend
+encryption is a separate future remote option, not the meaning of `cs.crypt`.
 
 ### Secret Safety
 

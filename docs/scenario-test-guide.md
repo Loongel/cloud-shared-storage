@@ -78,7 +78,8 @@ Reports are written under `reports/css-scenario-<run-id>/`:
   the default remote mode, for both `cs.crypt=false` and `cs.crypt=true`.
 - Local encryption: for `cs.crypt=true`, rclone uses the gocryptfs decrypted
   mount/cache view as input; tests must not treat the cipher directory as the
-  rclone source.
+  rclone source, and must not treat plaintext WebDAV content as an encryption
+  failure in the current default remote mode.
 - Backup enabled: Kopia prerequisites and snapshots are checked; missing config is
   `BLOCKED`.
 

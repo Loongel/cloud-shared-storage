@@ -41,6 +41,10 @@ Architecture invariants:
   storage. Rclone is placed on the gocryptfs auto-decrypted mount/cache view,
   not on the physical cipher directory, so rclone receives plaintext and, by
   default, writes plaintext to the S-side reverse proxy/WebDAV backend.
+- The encryption architecture is rclone on the gocryptfs auto-decrypted view,
+  not rclone on encrypted physical storage. `local/cipher` is an internal
+  gocryptfs-owned physical directory and must never be used as rclone source,
+  cache-dir, or periodic sync input.
 - `shared + multi` uses GlusterFS/LiteFS/router for the consistency layer; rclone
   is the egress path after the local/distributed consistency layer, not the
   cross-node write coordinator.
@@ -178,6 +182,9 @@ S-controlled sandbox:
 
 - Plaintext marker: `nodes/<node-id>/volumes/<docker-volume>/css-scenario-test/<run-id>/<scenario>/writers/<node>.txt`
 - Local encrypted state: `/mnt/cs_storage/vols/<docker-volume>/local/cipher/gocryptfs.conf`
+- Rclone source/cache invariant: realtime rclone uses the gocryptfs decrypted
+  cache/mount view; shared-multi sync uses the plaintext mounted view. A report
+  must not validate or recommend rclone reading `local/cipher`.
 
 For shared volumes, replace `<node-id>` with `_shared`. This preserves the
 S-side sandbox model from the technical design while allowing shared volumes to

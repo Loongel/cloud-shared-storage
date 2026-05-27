@@ -205,6 +205,14 @@ CSS services that were active before the upgrade. `/etc/cs-storage` config and
 secrets are preserved. During active delivery testing the timer interval is
 `5s`; before final long-term delivery change `OnUnitActiveSec` to `1min`.
 
+## Encryption Pipeline
+
+`cs.crypt=true` protects node-local physical/cache storage only. Containers
+still read and write plaintext, and the default WebDAV/S3 backend content is
+plaintext for debugging, management, and restore workflows. The required
+pipeline is rclone on the gocryptfs auto-decrypted mount/cache view. Rclone
+must not read, cache, or sync the physical cipher directory directly.
+
 ## Common Failures
 
 `--server-url is required for client`
