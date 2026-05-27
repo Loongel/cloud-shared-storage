@@ -105,7 +105,7 @@ services:
           -v /run:/run \
           -v /mnt/cs_storage/vols:/mnt/cs_storage/vols:rshared \
           -v /var/log/cs-storage:/var/log/cs-storage \
-          --entrypoint /usr/local/bin/cs-storage-daemon \
+          --entrypoint /usr/bin/cs-storage-daemon \
           $IMAGE >/tmp/daemon.cid
         docker run -d --name $PLUGIN_CONTAINER \
           -e CS_PLUGIN_SOCKET=$PLUGIN_SOCKET \
@@ -114,7 +114,7 @@ services:
           -e CS_PLUGIN_SCOPE=local \
           -v /run/docker/plugins:/run/docker/plugins \
           -v /run:/run \
-          --entrypoint /usr/local/bin/cs-storage-plugin \
+          --entrypoint /usr/bin/cs-storage-plugin \
           $IMAGE >/tmp/plugin.cid
         i=0
         while test "\$\$i" -lt 200; do

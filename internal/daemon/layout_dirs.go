@@ -7,7 +7,7 @@ func layoutDirsFor(meta volume.Metadata, layout Layout) []string {
 	plan := PlanPipeline(meta.Options)
 	if plan.RealtimeRclone {
 		if meta.Options.Crypt {
-			return appendUniqueDirs(dirs, layout.Remote, layout.Mountpoint)
+			return appendUniqueDirs(dirs, layout.Cipher, layout.Cache, layout.Mountpoint)
 		}
 		return appendUniqueDirs(dirs, layout.Mountpoint)
 	}
@@ -20,9 +20,6 @@ func layoutDirsFor(meta volume.Metadata, layout Layout) []string {
 		dirs = appendUniqueDirs(dirs, layout.Mountpoint, layout.LiteFSData, layout.LiteFSMount, layout.Gluster)
 	default:
 		dirs = appendUniqueDirs(dirs, layout.Mountpoint)
-	}
-	if meta.Options.Crypt {
-		dirs = appendUniqueDirs(dirs, layout.Remote)
 	}
 	return dirs
 }

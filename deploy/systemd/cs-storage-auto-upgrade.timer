@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CS-Storage automatic deb package upgrade
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=5s
+AccuracySec=1s
+Unit=cs-storage-auto-upgrade.service
+
+[Install]
+WantedBy=timers.target

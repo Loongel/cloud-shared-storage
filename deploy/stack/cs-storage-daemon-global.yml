@@ -1,7 +1,7 @@
 services:
   daemon:
     image: ${CS_STORAGE_IMAGE:-cs-storage:latest}
-    entrypoint: ["/usr/local/bin/cs-storage-daemon"]
+    entrypoint: ["/usr/bin/cs-storage-daemon"]
     environment:
       CS_DAEMON_SOCKET: /run/cs-storage.sock
       CS_ROOT_DIR: /mnt/cs_storage/vols

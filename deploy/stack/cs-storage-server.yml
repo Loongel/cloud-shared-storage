@@ -1,7 +1,7 @@
 services:
   gateway:
     image: ${CS_STORAGE_IMAGE:-cs-storage:latest}
-    entrypoint: ["/usr/local/bin/cs-storage-server"]
+    entrypoint: ["/usr/bin/cs-storage-server"]
     environment:
       CS_SERVER_ADDR: ":8080"
       CS_NODE_SECRET_KEY: "${CS_NODE_SECRET_KEY:-}"

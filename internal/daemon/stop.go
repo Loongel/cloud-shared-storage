@@ -4,29 +4,21 @@ import "cs-storage/internal/volume"
 
 func (s *Server) stopRealtime(meta volume.Metadata) error {
 	layout := s.layout(meta.Name)
+	_ = s.procs.Stop("rclone:" + meta.Name)
+	if err := unmountPath(layout.Mountpoint); err != nil {
+		return err
+	}
 	if meta.Options.Crypt {
 		_ = s.procs.Stop("gocryptfs:" + meta.Name)
-		if err := unmountPath(layout.Mountpoint); err != nil {
-			return err
-		}
+		return unmountPath(layout.Cache)
 	}
-	_ = s.procs.Stop("rclone:" + meta.Name)
-	if meta.Options.Crypt {
-		return unmountPath(layout.Remote)
-	}
-	return unmountPath(layout.Mountpoint)
+	return nil
 }
 
 func (s *Server) stopSharedMulti(meta volume.Metadata) error {
 	layout := s.layout(meta.Name)
 	if s.syncs != nil {
 		s.syncs.Stop("rclone-sync:" + meta.Name)
-	}
-	if meta.Options.Crypt {
-		_ = s.procs.Stop("gocryptfs-reverse:" + meta.Name)
-		if err := unmountPath(layout.Cipher); err != nil {
-			return err
-		}
 	}
 	switch PlanPipeline(meta.Options).Kind {
 	case PipelineSharedSQLite:

@@ -1,7 +1,7 @@
 services:
   plugin:
     image: ${CS_STORAGE_IMAGE:-cs-storage:latest}
-    entrypoint: ["/usr/local/bin/cs-storage-plugin"]
+    entrypoint: ["/usr/bin/cs-storage-plugin"]
     environment:
       CS_PLUGIN_SOCKET: /run/docker/plugins/css.sock
       CS_DAEMON_SOCKET: /run/cs-storage.sock

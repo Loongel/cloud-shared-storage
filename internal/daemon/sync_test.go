@@ -65,12 +65,12 @@ func TestSyncSourceAndTargetTemplates(t *testing.T) {
 	}
 }
 
-func TestSyncSourceUsesCipherForEncryptedSharedMulti(t *testing.T) {
+func TestSyncSourceUsesPlainMountForEncryptedSharedMulti(t *testing.T) {
 	root := t.TempDir()
 	s := &Server{cfg: Config{RootDir: root}}
 	meta := testSharedMultiMeta("vol-a")
 	meta.Options.Crypt = true
-	if got, want := s.syncSource(meta), filepath.Join(root, "vol-a", "remote", "cipher"); got != want {
+	if got, want := s.syncSource(meta), filepath.Join(root, "vol-a", "mount"); got != want {
 		t.Fatalf("unexpected encrypted sync source %q want %q", got, want)
 	}
 }

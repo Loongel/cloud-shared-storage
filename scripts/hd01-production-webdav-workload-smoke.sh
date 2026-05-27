@@ -179,7 +179,7 @@ version: "3.8"
 services:
   gateway:
     image: $IMAGE
-    entrypoint: ["/usr/local/bin/cs-storage-server"]
+    entrypoint: ["/usr/bin/cs-storage-server"]
     environment:
       CS_SERVER_ADDR: ":8080"
       CS_NODE_SECRET_KEY: "$SECRET"
@@ -218,7 +218,7 @@ services:
         CS_NODE_SECRET_KEY=$SECRET \\
         CS_RCLONE_VFS_CACHE_MODE=writes \\
         CS_RCLONE_EXTRA_ARGS="--allow-other" \\
-        /usr/local/bin/cs-storage-daemon &
+        /usr/bin/cs-storage-daemon &
         pid=\$\$!
         wait \$\$pid
     cap_add:
@@ -257,7 +257,7 @@ services:
         CS_PLUGIN_TIMEOUT=5s \\
         CS_PLUGIN_SCOPE=local \\
         CS_DOCKER_SOCKET= \\
-        /usr/local/bin/cs-storage-plugin &
+        /usr/bin/cs-storage-plugin &
         pid=\$\$!
         wait \$\$pid
     volumes:

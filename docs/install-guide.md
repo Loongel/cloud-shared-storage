@@ -177,11 +177,33 @@ sudo apt-get remove -y cs-storage
 
 Use `purge` for a full node cleanup. This removes package files, CSS config,
 secrets, state, logs, `/mnt/cs_storage`, sockets, and the `cs-storage` system
-user/group:
+user/group. The deb maintainer script refuses removal if Docker still has
+`css` volumes, containers using those volumes, or active mounts under
+`/mnt/cs_storage/vols`; stop the owning stacks/containers and remove those
+volumes first:
 
 ```sh
 sudo apt-get purge -y cs-storage
 ```
+
+Emergency forced cleanup is available, but should only be used after confirming
+no application still needs the mounted data:
+
+```sh
+sudo env CSS_STORAGE_PURGE_FORCE=1 apt-get purge -y cs-storage
+```
+
+The package removes only CSS-owned files and legacy CSS files from old package
+layouts. It does not remove `/usr/local/bin` or unrelated local files.
+
+## Automatic Package Upgrade
+
+The deb installs `cs-storage-auto-upgrade.timer`. It checks the GitHub latest
+Release, downloads a newer `cs-storage_<version>_amd64.deb`, verifies the
+`.sha256` asset when present, installs it non-interactively, and restarts only
+CSS services that were active before the upgrade. `/etc/cs-storage` config and
+secrets are preserved. During active delivery testing the timer interval is
+`5s`; before final long-term delivery change `OnUnitActiveSec` to `1min`.
 
 ## Common Failures
 

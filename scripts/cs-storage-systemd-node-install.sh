@@ -2,8 +2,8 @@
 set -eu
 
 ROLE=${ROLE:-all}
-PREFIX=${PREFIX:-/usr/local/bin}
-SYSTEMD_DIR=${SYSTEMD_DIR:-/etc/systemd/system}
+PREFIX=${PREFIX:-/usr/bin}
+SYSTEMD_DIR=${SYSTEMD_DIR:-/lib/systemd/system}
 ENV_DIR=${ENV_DIR:-/etc/cs-storage}
 SECRET_DIR=${SECRET_DIR:-$ENV_DIR/secrets}
 STATE_DIR=${STATE_DIR:-/var/lib/cs-storage}
@@ -534,6 +534,9 @@ write_envs() {
       printf 'CS_RCLONE_SYNC_INTERVAL=%s\n' "$CS_RCLONE_SYNC_INTERVAL"
       printf 'CS_GLUSTER_REMOTE=%s\n' "$CS_GLUSTER_REMOTE"
       printf 'CS_LITEFS_HTTP_ADDR=%s\n' "$CS_LITEFS_HTTP_ADDR"
+      if test -x /usr/lib/cs-storage/bin/litefs; then
+        printf 'CS_LITEFS_BINARY=/usr/lib/cs-storage/bin/litefs\n'
+      fi
       printf 'CS_LITEFS_LEASE_TYPE=%s\n' "$CS_LITEFS_LEASE_TYPE"
       printf 'CS_LITEFS_ADVERTISE_URL=%s\n' "$CS_LITEFS_ADVERTISE_URL"
       test -z "$CS_LITEFS_CONSUL_URL" || printf 'CS_LITEFS_CONSUL_URL=%s\n' "$CS_LITEFS_CONSUL_URL"
@@ -541,6 +544,12 @@ write_envs() {
       printf 'CS_LITEFS_CONSUL_TTL=%s\n' "$CS_LITEFS_CONSUL_TTL"
       printf 'CS_LITEFS_CONSUL_LOCK_DELAY=%s\n' "$CS_LITEFS_CONSUL_LOCK_DELAY"
       printf 'CS_KOPIA_CONFIG_PATH=%s\n' "$CS_KOPIA_CONFIG_PATH"
+      if test -x /usr/lib/cs-storage/bin/kopia; then
+        printf 'CS_KOPIA_BINARY=/usr/lib/cs-storage/bin/kopia\n'
+      fi
+      if test -x /usr/lib/cs-storage/bin/cs-storage-router; then
+        printf 'CS_ROUTER_BINARY=/usr/lib/cs-storage/bin/cs-storage-router\n'
+      fi
       printf 'CS_KOPIA_PASSWORD_FILE=%s\n' "$CS_KOPIA_PASSWORD_FILE"
       printf 'CS_KOPIA_SNAPSHOT_INTERVAL=%s\n' "$CS_KOPIA_SNAPSHOT_INTERVAL"
       printf 'CS_KOPIA_POLICY_ARGS=%s\n' "$CS_KOPIA_POLICY_ARGS"

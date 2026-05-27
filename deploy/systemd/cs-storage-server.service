@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/cs-storage/server.env
-ExecStartPre=+/usr/local/sbin/cs-storage-firewall-ensure /etc/cs-storage/server.env
-ExecStart=/usr/local/bin/cs-storage-server
+ExecStartPre=+/usr/sbin/cs-storage-firewall-ensure /etc/cs-storage/server.env
+ExecStart=/usr/bin/cs-storage-server
 Restart=always
 RestartSec=3s
 User=cs-storage

@@ -36,8 +36,11 @@ Architecture invariants:
 - C-side rclone talks to the S-side gateway with JWT auth, not directly to the
   backend.
 - `private` and `shared + single` use the single-write realtime chain described
-  by the design: Docker volume path -> gocryptfs realtime encryption when
-  enabled -> rclone VFS -> S-side reverse proxy.
+  by the design: Docker volume path is plaintext for the container; when
+  `cs.crypt=true`, gocryptfs protects node-local rclone VFS cache/physical
+  storage. Rclone is placed on the gocryptfs auto-decrypted mount/cache view,
+  not on the physical cipher directory, so rclone receives plaintext and, by
+  default, writes plaintext to the S-side reverse proxy/WebDAV backend.
 - `shared + multi` uses GlusterFS/LiteFS/router for the consistency layer; rclone
   is the egress path after the local/distributed consistency layer, not the
   cross-node write coordinator.
@@ -160,12 +163,12 @@ Execution rules:
 | Type | Workload Action | Expected Local State | Expected Backend State |
 | --- | --- | --- | --- |
 | private single plaintext | Each node writes its own marker | Node sees only its own marker | Plaintext marker exists under that node's daemon id |
-| private single encrypted | Each node writes its own marker | Node sees only its own marker | Plaintext marker absent; gocryptfs cipher state exists |
+| private single encrypted | Each node writes its own marker | Node sees only its own marker; node-local cache/physical storage is encrypted | Plaintext marker exists under that node's daemon id in default remote mode |
 | shared single plaintext | Deterministic writer writes one marker | Every selected node sees writer marker | Plaintext writer marker exists under shared volume namespace |
-| shared single encrypted | Deterministic writer writes one marker | Every selected node sees writer marker | Plaintext marker absent; cipher state exists |
-| shared multi static | Every node writes a marker | Every node sees all node markers | Plaintext or encrypted backend follows `cs.crypt` |
-| shared multi sqlite | Every node inserts one SQLite row | `PRAGMA integrity_check=ok`, row count equals node count | Backend DB or encrypted state follows `cs.crypt` |
-| shared multi auto | File marker plus SQLite probe | File and SQLite expectations both pass | Backend follows selected plaintext/encrypted mode |
+| shared single encrypted | Deterministic writer writes one marker | Every selected node sees writer marker; node-local cache/physical storage is encrypted | Plaintext writer marker exists under shared volume namespace in default remote mode |
+| shared multi static | Every node writes a marker | Every node sees all node markers | Plaintext backend follows the mounted view in default remote mode |
+| shared multi sqlite | Every node inserts one SQLite row | `PRAGMA integrity_check=ok`, row count equals node count | Backend DB follows the mounted view in default remote mode |
+| shared multi auto | File marker plus SQLite probe | File and SQLite expectations both pass | Backend follows the mounted view in default remote mode |
 | backup enabled | Normal workload plus snapshot | Workload passes locally | Kopia snapshot found and restore matches mounted plaintext view |
 
 Backend paths are volume-scoped inside the S-side sandbox. Private volumes use
@@ -174,12 +177,13 @@ all clients address the same remote tree while still staying inside an
 S-controlled sandbox:
 
 - Plaintext marker: `nodes/<node-id>/volumes/<docker-volume>/css-scenario-test/<run-id>/<scenario>/writers/<node>.txt`
-- Encrypted state: `nodes/<node-id>/volumes/<docker-volume>/cipher/gocryptfs.conf`
+- Local encrypted state: `/mnt/cs_storage/vols/<docker-volume>/local/cipher/gocryptfs.conf`
 
 For shared volumes, replace `<node-id>` with `_shared`. This preserves the
 S-side sandbox model from the technical design while allowing shared volumes to
-be genuinely cross-node visible and preventing independent Docker volumes from
-sharing one gocryptfs cipher root.
+be genuinely cross-node visible. `cs.crypt` protects node-local physical/cache
+storage; it does not imply encrypted WebDAV backend content in the default
+remote mode.
 
 ## Failure Classification
 

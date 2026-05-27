@@ -6,15 +6,18 @@ import (
 	"cs-storage/internal/volume"
 )
 
-func TestLayoutDirsForRealtimeCryptDoesNotPrecreateCipherInsideRcloneMount(t *testing.T) {
+func TestLayoutDirsForRealtimeCryptUsesEncryptedLocalCache(t *testing.T) {
 	s := &Server{cfg: Config{RootDir: "/root"}}
 	meta := volume.Metadata{Name: "app", Options: volume.Options{Mode: "shared", Write: "single", Engine: "auto", Crypt: true}}
 	layout := s.layout(meta.Name)
 	got := layoutDirsFor(meta, layout)
-	if containsDir(got, layout.Cipher) {
-		t.Fatalf("realtime encrypted layout must not precreate cipher under rclone mount: %#v", got)
+	if !containsDir(got, layout.Cipher) || !containsDir(got, layout.Cache) {
+		t.Fatalf("realtime encrypted layout must create encrypted cache dirs: %#v", got)
 	}
-	if !containsDir(got, layout.Remote) || !containsDir(got, layout.Mountpoint) {
+	if containsDir(got, layout.Remote) {
+		t.Fatalf("realtime encrypted layout must not use remote cipher tree: %#v", got)
+	}
+	if !containsDir(got, layout.Mountpoint) {
 		t.Fatalf("realtime encrypted layout missing mount dirs: %#v", got)
 	}
 }

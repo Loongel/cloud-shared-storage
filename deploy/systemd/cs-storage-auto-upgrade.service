@@ -1,0 +1,10 @@
+[Unit]
+Description=CS-Storage automatic deb package upgrade
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cs-storage/sbin/cs-storage-auto-upgrade
+User=root
+Group=root

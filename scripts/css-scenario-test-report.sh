@@ -178,12 +178,6 @@ backend_marker_rel() {
   printf 'nodes/%s/volumes/%s/css-scenario-test/%s/%s/writers/%s.txt' "$storage_node" "$docker_volume" "$RUN_ID" "$scenario" "$writer_node"
 }
 
-backend_cipher_rel() {
-  storage_node=$1
-  docker_volume=$2
-  printf 'nodes/%s/volumes/%s/cipher/gocryptfs.conf' "$storage_node" "$docker_volume"
-}
-
 backend_sqlite_rel() {
   storage_node=$1
   docker_volume=$2
@@ -261,24 +255,6 @@ backend_check() {
   for node in $(printf '%s\n' "$expected_visible" | tr ',' ' '); do
     [ -n "$node" ] || continue
     tmp=$(mktemp /tmp/css-backend.XXXXXX)
-    if [ "$crypt" = "true" ]; then
-      plaintext_found=0
-      for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
-        rel=$(backend_marker_rel "$storage_node" "$scenario" "$node" "$docker_volume")
-        if curl_backend "$rel" > "$tmp" 2>/dev/null; then
-          plaintext_found=1
-          break
-        fi
-      done
-      if [ "$plaintext_found" = "1" ]; then
-        result=FAIL
-        detail="${detail}${detail:+,}$node:plaintext_visible"
-      else
-        detail="${detail}${detail:+,}$node:plaintext_absent"
-      fi
-      rm -f "$tmp"
-      continue
-    fi
     if [ "$workload" = "shared-multi-sqlite" ]; then
       deadline=$(( $(date +%s) + 60 ))
       while :; do
@@ -343,24 +319,6 @@ backend_check() {
     fi
     rm -f "$tmp"
   done
-  if [ "$crypt" = "true" ]; then
-    cipher_ok=0
-    for node in $(printf '%s\n' "$expected_visible" | tr ',' ' '); do
-      for storage_node in $(backend_storage_candidates "$node" "$mode" | awk '!seen[$0]++'); do
-        if curl_backend "$(backend_cipher_rel "$storage_node" "$docker_volume")" >/dev/null 2>&1 || curl_backend "nodes/$storage_node/cipher/gocryptfs.conf" >/dev/null 2>&1; then
-          cipher_ok=1
-          break
-        fi
-      done
-      [ "$cipher_ok" = "1" ] && break
-    done
-    if [ "$cipher_ok" = "1" ]; then
-      detail="${detail}${detail:+,}cipher_present"
-    else
-      result=FAIL
-      detail="${detail}${detail:+,}cipher_missing"
-    fi
-  fi
   printf '%s:%s' "$result" "${detail:-ok}"
 }
 

@@ -32,6 +32,29 @@ func TestRcloneMountArgsUseRuntimeBearerHeader(t *testing.T) {
 	}
 }
 
+func TestEncryptedRealtimeRcloneUsesDecryptedGocryptfsCacheView(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{cfg: Config{RootDir: root}}
+	layout := s.layout("vol")
+	args, err := (RcloneMountSpec{
+		ConfigPath: "/tmp/rclone.conf",
+		RemoteName: "vol",
+		Mountpoint: layout.Mountpoint,
+		CacheDir:   layout.Cache,
+		Token:      "jwt-token",
+	}).Args()
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, "\x00")
+	if !strings.Contains(joined, "--cache-dir\x00"+layout.Cache) {
+		t.Fatalf("rclone must use the decrypted gocryptfs cache mount as cache-dir: %#v", args)
+	}
+	if strings.Contains(joined, layout.Cipher) {
+		t.Fatalf("rclone must not read/write the physical cipher directory: %#v", args)
+	}
+}
+
 func TestRcloneMountArgsEnableRC(t *testing.T) {
 	args, err := (RcloneMountSpec{
 		ConfigPath: "/tmp/rclone.conf",

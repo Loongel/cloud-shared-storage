@@ -254,7 +254,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 					return err
 				}
 			}
-			for _, path := range []string{layout.Mountpoint, layout.Remote, layout.Cipher, layout.Gluster, layout.LiteFSMount} {
+			for _, path := range []string{layout.Mountpoint, layout.Remote, layout.Cache, layout.Cipher, layout.Gluster, layout.LiteFSMount} {
 				if err := unmountPath(path); err != nil {
 					return err
 				}

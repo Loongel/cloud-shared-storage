@@ -335,7 +335,7 @@ services:
           -v "$ROOT_DIR:$ROOT_DIR:rshared" \
           -v /var/log/cs-storage:/var/log/cs-storage \
           -v /etc/cs-storage/secrets:/run/cs-storage-secrets:ro \
-          --entrypoint /usr/local/bin/cs-storage-daemon \
+          --entrypoint /usr/bin/cs-storage-daemon \
           "$IMAGE" >/tmp/cs-storage-daemon.cid
         docker run -d --name "$PLUGIN_CONTAINER" \
           --restart unless-stopped \
@@ -345,7 +345,7 @@ services:
           -v /run/docker/plugins:/run/docker/plugins \
           -v /run:/run \
           -v /var/run/docker.sock:/var/run/docker.sock \
-          --entrypoint /usr/local/bin/cs-storage-plugin \
+          --entrypoint /usr/bin/cs-storage-plugin \
           "$IMAGE" >/tmp/cs-storage-plugin.cid
         i=0
         while test "\$\$i" -lt 240; do

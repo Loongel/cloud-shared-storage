@@ -147,7 +147,7 @@ services:
         CS_AUDIT_LOG=$AUDIT_LOG \\
         CS_ENABLE_CHATTR=false \\
         CS_RECOVER_MOUNTS=false \\
-        /usr/local/bin/cs-storage-daemon &
+        /usr/bin/cs-storage-daemon &
         pid=\$\$!
         wait \$\$pid
     volumes:
@@ -180,7 +180,7 @@ services:
         CS_PLUGIN_TIMEOUT=3s \\
         CS_PLUGIN_SCOPE=local \\
         CS_DOCKER_SOCKET= \\
-        /usr/local/bin/cs-storage-plugin &
+        /usr/bin/cs-storage-plugin &
         pid=\$\$!
         wait \$\$pid
     volumes:

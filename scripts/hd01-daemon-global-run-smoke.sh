@@ -45,7 +45,7 @@ services:
         CS_AUDIT_LOG=/tmp/cs-storage-smoke/state/audit.jsonl \
         CS_ENABLE_CHATTR=false \
         CS_RECOVER_MOUNTS=false \
-        /usr/local/bin/cs-storage-daemon &
+        /usr/bin/cs-storage-daemon &
         pid=\$!
         sleep 5
         if test -S /tmp/cs-storage-smoke.sock; then

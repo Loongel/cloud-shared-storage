@@ -74,9 +74,11 @@ Reports are written under `reports/css-scenario-<run-id>/`:
 - Shared multi SQLite volumes: every node inserts a deterministic SQLite row;
   every node must report `PRAGMA integrity_check=ok` and the expected row count.
 - Shared multi auto volumes: normal marker files plus SQLite checks.
-- Plaintext WebDAV: direct backend GET must match the expected marker checksum.
-- Encrypted WebDAV: plaintext marker paths must be absent and encrypted cipher
-  state must exist.
+- WebDAV backend: direct backend GET must match the expected marker checksum in
+  the default remote mode, for both `cs.crypt=false` and `cs.crypt=true`.
+- Local encryption: for `cs.crypt=true`, rclone uses the gocryptfs decrypted
+  mount/cache view as input; tests must not treat the cipher directory as the
+  rclone source.
 - Backup enabled: Kopia prerequisites and snapshots are checked; missing config is
   `BLOCKED`.
 

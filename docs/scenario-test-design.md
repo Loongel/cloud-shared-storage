@@ -54,7 +54,11 @@ Effective pipeline semantics:
 - `shared + multi + sqlite`: LiteFS path.
 - `shared + multi + auto`: router path, SQLite files route to LiteFS and normal
   files route to GlusterFS.
-- `cs.crypt=true`: backend must not expose plaintext path or plaintext content.
+- `cs.crypt=true`: container-visible data remains plaintext, while CSS encrypts
+  node-local physical/cache storage before it lands on the host disk. In the
+  default remote mode rclone reads plaintext from the mounted view and writes
+  plaintext to WebDAV/S3. Backend encryption is a future separate option and
+  must not be inferred from `cs.crypt`.
 - `cs.backup=true`: Kopia must snapshot and restore the mounted plaintext view.
 
 ## Full Valid Matrix
@@ -158,14 +162,13 @@ Expected local volume state:
 
 - Own marker exists and exact checksum matches.
 - Other nodes' markers are absent.
+- With `crypt=true`, plaintext is visible only through the mounted Docker volume
+  view; the node-local cache/cipher backing path contains gocryptfs state.
 
 Expected WebDAV backend state:
 
-- `crypt=false`: backend plaintext path for that node contains the exact marker
-  bytes.
-- `crypt=true`: backend plaintext marker path is absent; encrypted cipher state
-  exists; plaintext marker filename and marker content must not be visible in
-  direct backend checks.
+- `crypt=false` and `crypt=true`: backend plaintext path for that node contains
+  the exact marker bytes in the default remote mode.
 
 Expected cross-node result:
 
@@ -188,13 +191,13 @@ Expected local volume state:
 - Writer node reads its own marker.
 - Every reader node sees the writer marker with the exact checksum.
 - Non-writer nodes must not create writer markers.
+- With `crypt=true`, plaintext is visible only through the mounted Docker volume
+  view; the node-local cache/cipher backing path contains gocryptfs state.
 
 Expected WebDAV backend state:
 
-- `crypt=false`: backend contains exactly the writer marker for the shared
-  volume namespace and the bytes match.
-- `crypt=true`: backend plaintext marker path is absent; encrypted cipher state
-  exists for the shared volume namespace.
+- `crypt=false` and `crypt=true`: backend contains exactly the writer marker for
+  the shared volume namespace and the bytes match in the default remote mode.
 
 Expected cross-node result:
 
@@ -225,9 +228,10 @@ Expected local volume state:
 
 Expected WebDAV backend state:
 
-- `crypt=false`: after sync settle, backend contains all node markers with exact
-  bytes.
-- `crypt=true`: plaintext marker paths are absent; encrypted state exists.
+- `crypt=false` and `crypt=true`: after sync settle, backend contains all node
+  markers with exact bytes in the default remote mode. `rclone sync` reads the
+  gocryptfs decrypted mount view when local encryption is enabled, not the
+  physical cipher directory.
 
 ### Shared Multi SQLite Workload
 
@@ -259,9 +263,10 @@ Expected local volume state:
 
 Expected WebDAV backend state:
 
-- `crypt=false`: after sync settle, the backend database can be downloaded and
-  `PRAGMA integrity_check` returns `ok`; row count matches.
-- `crypt=true`: plaintext database path is absent; encrypted state exists.
+- `crypt=false` and `crypt=true`: after sync settle, the backend database can be
+  downloaded and `PRAGMA integrity_check` returns `ok`; row count matches in the
+  default remote mode. `rclone sync` reads the decrypted mount view, not the
+  physical cipher directory.
 
 ### Shared Multi Auto Workload
 
@@ -287,7 +292,10 @@ Expected local volume state:
 
 Expected backend state:
 
-- Same as static plus SQLite expectations, adjusted for encryption.
+- Same as static plus SQLite expectations. `cs.crypt=true` does not change the
+  default backend expectation: rclone reads the decrypted mounted view and the
+  WebDAV/S3 backend remains plaintext unless a future backend-encryption option
+  is explicitly introduced.
 
 ### Backup Enabled Workload
 
@@ -316,7 +324,7 @@ These are host-side control tests, not long-running application workloads.
 
 | ID | Purpose | Operation | Expected |
 | --- | --- | --- | --- |
-| CTRL-DEFAULT | No opts uses defaults | Create volume with driver `css` and no opts | plan is private-rclone, crypt=true, backup=false; plaintext backend marker absent |
+| CTRL-DEFAULT | No opts uses defaults | Create volume with driver `css` and no opts | plan is private-rclone, crypt=true, backup=false; no backend marker is expected because the control does not perform workload writes |
 | CTRL-ALIASES | Non-`cs.` aliases are accepted | Create with `mode=shared`, `write=single`, `crypt=false` | normalized options match `cs.*` equivalents |
 | CTRL-LABEL-RENDER | Compose labels render to driver opts | run `cs-storage-admin render-compose` | supported labels appear in `driver_opts` |
 | CTRL-OPTS-PRECEDENCE | explicit opts override labels | label says shared, driver opts say private | created plan follows opts |
@@ -390,8 +398,9 @@ Per WebDAV backend check:
 - actual HTTP status for each expected path
 - expected checksum
 - actual checksum
-- encrypted plaintext-path absence status
-- encrypted cipher-state presence status
+- local encrypted backing path status for `cs.crypt=true`
+- confirmation that rclone/backend checks read the decrypted mounted view, not
+  the physical cipher directory
 - backend listing summary
 - status and error
 

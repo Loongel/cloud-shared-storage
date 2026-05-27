@@ -65,7 +65,16 @@ one-command installer from GitHub.
 For rollback, `sudo apt-get remove -y cs-storage` removes package-managed
 binaries and units while keeping node data. `sudo apt-get purge -y cs-storage`
 is the full cleanup path and removes CSS config/secrets, state, logs,
-`/mnt/cs_storage`, sockets, and the `cs-storage` system user/group.
+`/mnt/cs_storage`, sockets, and the `cs-storage` system user/group. Removal is
+blocked with a clear `CSS_PURGE_BLOCKED` message if `css` Docker volumes,
+containers using those volumes, or active CSS mounts still exist. Stop/remove
+the stacks and volumes first; use `sudo env CSS_STORAGE_PURGE_FORCE=1 apt-get
+purge -y cs-storage` only for emergency cleanup.
+
+The package also enables `cs-storage-auto-upgrade.timer`. It checks GitHub
+latest Release and installs a newer deb while preserving `/etc/cs-storage`
+configuration and secrets. The active-development interval is `5s`; final
+long-term delivery should use `1min`.
 
 Server only:
 
@@ -109,7 +118,7 @@ The package also includes the lower-level `cs-storage-systemd-node-install` for 
 ACK_INSTALL_HOST_DEPS=yes \
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.17/cs-storage_0.1.17_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.18/cs-storage_0.1.18_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \

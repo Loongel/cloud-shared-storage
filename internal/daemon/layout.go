@@ -22,7 +22,7 @@ func (s *Server) layout(name string) Layout {
 		Root:        root,
 		Mountpoint:  filepath.Join(root, "mount"),
 		Remote:      filepath.Join(root, "remote"),
-		Cipher:      filepath.Join(root, "remote", "cipher"),
+		Cipher:      filepath.Join(root, "local", "cipher"),
 		Cache:       filepath.Join(root, "cache"),
 		Logs:        filepath.Join(root, "logs"),
 		Config:      filepath.Join(root, "config"),

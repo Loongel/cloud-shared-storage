@@ -71,7 +71,7 @@ docker run -d --name "$SERVER" --network host \
   -e CS_NODE_SECRET_KEY=litefs-consul-global-smoke-secret \
   -e CS_BACKEND_URL=http://127.0.0.1:9 \
   -e CS_COORDINATOR_TOKEN=$TOKEN \
-  --entrypoint /usr/local/bin/cs-storage-server \
+  --entrypoint /usr/bin/cs-storage-server \
   "$IMAGE" >/tmp/cs-litefs-consul-global-server.cid
 for _ in $(seq 1 80); do
   if docker run --rm --network host "$PROBE_IMAGE" wget -qO- "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then

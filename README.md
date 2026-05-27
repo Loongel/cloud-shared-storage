@@ -188,18 +188,19 @@ Formal production deployment uses host systemd services, not long-running CS-Sto
 - `cs-storage-server.service` listens on the NetBird `wt0` IPv4 address by default, using the first free port in `18080-18100`.
 - `cs-storage-daemon.service` owns `/run/cs-storage.sock` and host mounts under `/mnt/cs_storage/vols`.
 - `cs-storage-plugin.service` owns `/run/docker/plugins/css.sock` for the Docker `css` VolumeDriver.
+- `cs-storage-auto-upgrade.timer` checks the GitHub latest Release and installs a newer `.deb` automatically. During active development the timer interval is `5s`; before final long-term delivery it should be changed to `1min`. Package upgrades replace binaries, systemd units, helper scripts, and the Docker VolumeDriver socket implementation, while preserving `/etc/cs-storage` configuration and secrets.
 
 Build the release package:
 
 ```sh
-./scripts/cs-storage-build-deb.sh --version 0.1.17
+./scripts/cs-storage-build-deb.sh --version 0.1.18
 ```
 
 Publish through GitHub Actions by pushing a tag:
 
 ```sh
-git tag v0.1.17
-git push origin main v0.1.17
+git tag v0.1.18
+git push origin main v0.1.18
 ```
 
 For normal installs, use the role-specific one-command wrappers.
@@ -251,7 +252,7 @@ The lower-level installer remains available for advanced automation:
 curl -fsSL https://raw.githubusercontent.com/Loongel/cloud-shared-storage/main/scripts/cs-storage-systemd-node-install.sh -o /tmp/cs-storage-install.sh
 ACK_INSTALL_HOST_DEPS=yes \
 sh /tmp/cs-storage-install.sh \
-  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.17/cs-storage_0.1.17_amd64.deb \
+  --deb-url https://github.com/Loongel/cloud-shared-storage/releases/download/v0.1.18/cs-storage_0.1.18_amd64.deb \
   --role all \
   --driver-name css \
   --server-url http://127.0.0.1:18080 \
@@ -274,9 +275,26 @@ one-command installer from GitHub. Final install output is separated into
 highlighted summary blocks; set `CSS_OUTPUT_COLOR=never` to disable ANSI color.
 
 To uninstall, use `sudo apt-get remove -y cs-storage` to keep node data, or
-`sudo apt-get purge -y cs-storage` for full cleanup of package files, CSS
-config/secrets, state, logs, `/mnt/cs_storage`, sockets, and the `cs-storage`
-system user/group.
+`sudo apt-get purge -y cs-storage` for full cleanup of CSS config/secrets,
+state, logs, `/mnt/cs_storage`, sockets, and the `cs-storage` system
+user/group. The package refuses removal when Docker still has `css` volumes,
+containers using those volumes, or active mounts under `/mnt/cs_storage/vols`;
+stop the owning stacks/containers and remove the volumes first. Emergency
+cleanup can be forced with `sudo env CSS_STORAGE_PURGE_FORCE=1 apt-get purge -y
+cs-storage`. The package only removes CSS-owned files and legacy CSS files from
+older packages; it does not remove `/usr/local/bin` or unrelated local files.
+
+### Encryption Semantics
+
+`cs.crypt=true` means node-local physical/cache encryption. Containers always
+read and write plaintext through the Docker volume mount. For realtime
+private/shared-single volumes, rclone receives plaintext and writes plaintext
+to the S-side/WebDAV backend by default, while its local VFS cache is backed by
+gocryptfs so host disk state is encrypted. The invariant is: rclone is placed
+on the gocryptfs auto-decrypted mount/cache view, never on the physical cipher
+directory. For shared-multi volumes, rclone sync reads the plaintext mounted
+view; backend encryption is a separate future remote option, not the meaning of
+`cs.crypt`.
 
 ### Secret Safety
 

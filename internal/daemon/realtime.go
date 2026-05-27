@@ -23,8 +23,10 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	if isMountpointFunc(layout.Mountpoint) {
 		return nil
 	}
-	if meta.Options.Crypt && isMountpointFunc(layout.Remote) {
-		return s.ensureGocryptfs(meta)
+	if meta.Options.Crypt {
+		if err := s.ensureEncryptedCache(meta); err != nil {
+			return err
+		}
 	}
 	token, err := (AuthClient{
 		ServerURL: s.cfg.ServerURL,
@@ -53,15 +55,11 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	if err := s.ensureRcloneVolumeRemote(ctx, configPath, meta, token.Value); err != nil {
 		return err
 	}
-	mountpoint := layout.Mountpoint
-	if meta.Options.Crypt {
-		mountpoint = layout.Remote
-	}
 	spec := RcloneMountSpec{
 		ConfigPath:      configPath,
 		RemoteName:      meta.Name,
 		RemotePath:      volumeRemotePath(meta.Name),
-		Mountpoint:      mountpoint,
+		Mountpoint:      layout.Mountpoint,
 		CacheDir:        layout.Cache,
 		Token:           token.Value,
 		VFSCacheMode:    s.cfg.RcloneVFSCacheMode,
@@ -89,11 +87,8 @@ func (s *Server) ensureRealtimeRclone(ctx context.Context, meta volume.Metadata)
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "rclone:"+meta.Name, mountpoint, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "rclone:"+meta.Name, layout.Mountpoint, 10*time.Second); err != nil {
 		return err
-	}
-	if meta.Options.Crypt {
-		return s.ensureGocryptfs(meta)
 	}
 	return nil
 }
@@ -171,12 +166,12 @@ func isRcloneMissingPathError(err error) bool {
 	return strings.Contains(text, "not found") || strings.Contains(text, "directory not found") || strings.Contains(text, "object not found")
 }
 
-func (s *Server) ensureGocryptfs(meta volume.Metadata) error {
+func (s *Server) ensureEncryptedCache(meta volume.Metadata) error {
 	if s.cfg.GocryptfsPassword == "" {
 		return fmt.Errorf("cs.crypt=true requires CS_GOCRYPTFS_PASSWORD")
 	}
 	layout := s.layout(meta.Name)
-	if isMountpointFunc(layout.Mountpoint) {
+	if isMountpointFunc(layout.Cache) {
 		return nil
 	}
 	binary := s.cfg.GocryptfsBinary
@@ -198,7 +193,7 @@ func (s *Server) ensureGocryptfs(meta volume.Metadata) error {
 			return fmt.Errorf("gocryptfs init failed: %w", err)
 		}
 	}
-	args := []string{"-passfile", passfile, layout.Cipher, layout.Mountpoint}
+	args := []string{"-passfile", passfile, layout.Cipher, layout.Cache}
 	if s.cfg.GocryptfsExtraArgs != "" {
 		args = append(fields(s.cfg.GocryptfsExtraArgs), args...)
 	}
@@ -211,54 +206,7 @@ func (s *Server) ensureGocryptfs(meta volume.Metadata) error {
 	}); err != nil {
 		return err
 	}
-	if err := waitForManagedMountpoint(s.procs, "gocryptfs:"+meta.Name, layout.Mountpoint, 10*time.Second); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Server) ensureReverseGocryptfs(meta volume.Metadata) error {
-	if s.cfg.GocryptfsPassword == "" {
-		return fmt.Errorf("cs.crypt=true requires CS_GOCRYPTFS_PASSWORD")
-	}
-	layout := s.layout(meta.Name)
-	if isMountpointFunc(layout.Cipher) {
-		return nil
-	}
-	binary := s.cfg.GocryptfsBinary
-	if binary == "" {
-		binary = "gocryptfs"
-	}
-	passfile := filepath.Join(layout.Root, "config", "gocryptfs.pass")
-	if err := writeSecretFile(passfile, s.cfg.GocryptfsPassword); err != nil {
-		return err
-	}
-	configPath := filepath.Join(layout.Config, "gocryptfs-reverse.conf")
-	if !fileExists(configPath) {
-		cmd := exec.Command(binary, "-q", "-reverse", "-init", "-passfile", passfile, "-config", configPath, layout.Mountpoint)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("gocryptfs reverse init failed: %w", err)
-		}
-	}
-	if err := os.MkdirAll(layout.Cipher, 0o700); err != nil {
-		return err
-	}
-	args := []string{"-q", "-reverse", "-passfile", passfile, "-config", configPath, layout.Mountpoint, layout.Cipher}
-	if s.cfg.GocryptfsExtraArgs != "" {
-		args = append(fields(s.cfg.GocryptfsExtraArgs), args...)
-	}
-	if err := s.procs.Start(ProcessSpec{
-		Key:     "gocryptfs-reverse:" + meta.Name,
-		Binary:  binary,
-		Args:    args,
-		LogPath: filepath.Join(layout.Logs, "gocryptfs-reverse.log"),
-		Restart: true,
-	}); err != nil {
-		return err
-	}
-	if err := waitForManagedMountpoint(s.procs, "gocryptfs-reverse:"+meta.Name, layout.Cipher, 10*time.Second); err != nil {
+	if err := waitForManagedMountpoint(s.procs, "gocryptfs:"+meta.Name, layout.Cache, 10*time.Second); err != nil {
 		return err
 	}
 	return nil
